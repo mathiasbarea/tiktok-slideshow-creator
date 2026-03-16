@@ -28,6 +28,19 @@ function mergeConfig(defaults, profile) {
   };
 }
 
+function aspectRatioFromSize(width, height) {
+  if (!width || !height) return '9:16';
+  const ratio = width / height;
+  if (Math.abs(ratio - 1) < 0.08) return '1:1';
+  if (ratio < 1) return '9:16';
+  if (Math.abs(ratio - (4 / 3)) < 0.08) return '4:3';
+  return '16:9';
+}
+
+function imageSizeFromDimensions(width, height) {
+  return Math.max(width, height) > 1024 ? '2K' : '1K';
+}
+
 const defaultsPath = getArg('defaults');
 const profilePath = getArg('profile');
 const outputDirArg = getArg('output');
@@ -48,20 +61,27 @@ fs.mkdirSync(outputDir, { recursive: true });
 
 const provider = config.imageGen?.provider || 'openai';
 const model = config.imageGen?.model || 'gpt-image-1';
-const apiKey = process.env.OPENAI_API_KEY;
+const openaiApiKey = process.env.OPENAI_API_KEY;
+const geminiApiKey = process.env.GEMINI_API_KEY;
 const width = config.slides?.width || 1024;
 const height = config.slides?.height || 1536;
 const slideCount = config.slides?.count || 6;
 const size = `${width}x${height}`;
 const language = config.language || 'en';
+const geminiAspectRatio = aspectRatioFromSize(width, height);
+const geminiImageSize = imageSizeFromDimensions(width, height);
 
 if (!prompts.slides || prompts.slides.length !== slideCount) {
   console.error(`prompts.json must contain exactly ${slideCount} slide prompts`);
   process.exit(1);
 }
 
-if (!apiKey && provider !== 'local') {
+if (provider === 'openai' && !openaiApiKey) {
   console.error('Missing OPENAI_API_KEY. Configure it via ~/.openclaw/openclaw.json under skills.entries.shortform-content.');
+  process.exit(1);
+}
+if (provider === 'gemini' && !geminiApiKey) {
+  console.error('Missing GEMINI_API_KEY. Configure it via ~/.openclaw/openclaw.json under skills.entries.shortform-content.env.GEMINI_API_KEY.');
   process.exit(1);
 }
 
@@ -82,7 +102,7 @@ async function generateOpenAI(prompt, outPath) {
   const res = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${openaiApiKey}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
@@ -109,7 +129,7 @@ async function editOpenAI(referencePath, prompt, outPath) {
   const res = await fetch('https://api.openai.com/v1/images/edits', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`
+      'Authorization': `Bearer ${openaiApiKey}`
     },
     body: form
   });
@@ -118,10 +138,75 @@ async function editOpenAI(referencePath, prompt, outPath) {
   fs.writeFileSync(outPath, Buffer.from(data.data[0].b64_json, 'base64'));
 }
 
+async function generateGemini(prompt, outPath) {
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseModalities: ['TEXT', 'IMAGE'],
+        imageConfig: {
+          aspectRatio: geminiAspectRatio,
+          imageSize: geminiImageSize
+        }
+      }
+    })
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  const imagePart = parts.find(part => part.inlineData?.data);
+  if (!imagePart) throw new Error(`Gemini did not return image data: ${JSON.stringify(data)}`);
+  fs.writeFileSync(outPath, Buffer.from(imagePart.inlineData.data, 'base64'));
+}
+
+async function editGemini(referencePath, prompt, outPath) {
+  const referenceBase64 = fs.readFileSync(referencePath).toString('base64');
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType: 'image/png', data: referenceBase64 } }
+        ]
+      }],
+      generationConfig: {
+        responseModalities: ['TEXT', 'IMAGE'],
+        imageConfig: {
+          aspectRatio: geminiAspectRatio,
+          imageSize: geminiImageSize
+        }
+      }
+    })
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  const imagePart = parts.find(part => part.inlineData?.data);
+  if (!imagePart) throw new Error(`Gemini did not return edited image data: ${JSON.stringify(data)}`);
+  fs.writeFileSync(outPath, Buffer.from(imagePart.inlineData.data, 'base64'));
+}
+
 async function generateLocal(_prompt, outPath, slideNum) {
   const localPath = path.join(outputDir, `local_slide${slideNum}.png`);
   if (!fs.existsSync(localPath)) throw new Error(`Place local image at ${localPath}`);
   fs.copyFileSync(localPath, outPath);
+}
+
+async function generateByProvider(prompt, outPath, slideNum) {
+  if (provider === 'local') return generateLocal(prompt, outPath, slideNum);
+  if (provider === 'openai') return generateOpenAI(prompt, outPath);
+  if (provider === 'gemini') return generateGemini(prompt, outPath);
+  throw new Error(`Unsupported provider: ${provider}`);
+}
+
+async function editByProvider(referencePath, prompt, outPath) {
+  if (provider === 'openai') return editOpenAI(referencePath, prompt, outPath);
+  if (provider === 'gemini') return editGemini(referencePath, prompt, outPath);
+  throw new Error(`Hero variations are not implemented for provider: ${provider}`);
 }
 
 async function runIndependent() {
@@ -134,16 +219,14 @@ async function runIndependent() {
     }
     const prompt = makePrompt(`${prompts.base}\n\n${prompts.slides[i]}`);
     console.log(`Generating slide ${i + 1}...`);
-    if (provider === 'local') await generateLocal(prompt, outPath, i + 1);
-    else if (provider === 'openai') await generateOpenAI(prompt, outPath);
-    else throw new Error(`Unsupported provider for v1: ${provider}`);
+    await generateByProvider(prompt, outPath, i + 1);
     console.log(`Saved ${outPath}`);
   }
 }
 
 async function runHeroVariations() {
-  if (provider !== 'openai') {
-    console.log(`Mode hero-variations is currently implemented for openai only. Falling back to independent mode for provider=${provider}.`);
+  if (provider === 'local') {
+    console.log('Mode hero-variations is not implemented for local provider. Falling back to independent mode.');
     return runIndependent();
   }
 
@@ -153,7 +236,7 @@ async function runHeroVariations() {
 
   if (!fs.existsSync(heroPath) || fs.statSync(heroPath).size <= 10000) {
     console.log('Generating hero frame...');
-    await generateOpenAI(heroPrompt(), heroPath);
+    await generateByProvider(heroPrompt(), heroPath, 1);
     console.log(`Saved ${heroPath}`);
   } else {
     console.log('Reusing existing hero frame');
@@ -172,7 +255,7 @@ async function runHeroVariations() {
     }
     const prompt = variationPrompt(prompts.slides[i], i + 1);
     console.log(`Generating slide ${i + 1} from hero frame...`);
-    await editOpenAI(heroPath, prompt, outPath);
+    await editByProvider(heroPath, prompt, outPath);
     console.log(`Saved ${outPath}`);
   }
 }

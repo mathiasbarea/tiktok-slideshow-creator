@@ -27,6 +27,11 @@ Do not wrap accounts in an extra `accounts/` folder when the repo only contains 
 1. account identity
 2. account-level render overrides
 
+Supported image providers currently include:
+- `openai` with models like `gpt-image-1`
+- `gemini` with models like `gemini-3.1-flash-image-preview`
+- `local` for manually supplied images
+
 That means language, voice, tone, style, overlay style, audience, visual identity, provider, model, slide count, and slide size can all live in one account file.
 
 Keep business identity out of `defaults.json`. Use `defaults.json` only for global technical defaults. Let `profile.json` overwrite those defaults per account.
