@@ -15,8 +15,8 @@ const files = {
   'defaults.json': {
     language: 'en',
     imageGen: {
-      provider: 'openai',
-      model: 'gpt-image-1'
+      provider: 'gemini',
+      model: 'gemini-3.1-flash-image-preview'
     },
     slides: {
       count: 6,

@@ -53,8 +53,8 @@ function defaultProfile(accountId) {
     },
     render: {
       imageGen: {
-        provider: 'openai',
-        model: 'gpt-image-1'
+        provider: 'gemini',
+        model: 'gemini-3.1-flash-image-preview'
       },
       slides: {
         count: 6,

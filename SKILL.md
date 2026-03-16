@@ -28,8 +28,8 @@ Do not wrap accounts in an extra `accounts/` folder when the repo only contains 
 2. account-level render overrides
 
 Supported image providers currently include:
+- `gemini` with models like `gemini-3.1-flash-image-preview` (default)
 - `openai` with models like `gpt-image-1`
-- `gemini` with models like `gemini-3.1-flash-image-preview`
 - `local` for manually supplied images
 
 That means language, voice, tone, style, overlay style, audience, visual identity, provider, model, slide count, and slide size can all live in one account file.
