@@ -17,6 +17,7 @@ const postSlug = getArg('post') ? slugify(getArg('post')) : `${new Date().toISOS
 const offer = getArg('offer') || '';
 const cta = getArg('cta') || '';
 const message = getArg('message') || '';
+const angle = getArg('angle') || '';
 
 if (!accountId || !campaignId || !postTitle) {
   console.error('Usage: node create-post.js --dir <content-root> --account <account-id> --campaign <campaign-id> --title <post-title> [--post <post-slug>] [--offer <offer-name>] [--cta <cta>] [--message <message>]');

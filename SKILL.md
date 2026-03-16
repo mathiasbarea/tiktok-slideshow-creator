@@ -95,6 +95,8 @@ Use `scripts/build-post-package.js` only if you want a lightweight manifest in-p
 - If the user asks for a new campaign only, do not scaffold a post.
 - If the user asks for a slideshow/post/carousel, do not stop at scaffolding unless they explicitly asked for scaffolding only; draft actual prompts, overlay text, and caption.
 - Respect account voice/profile constraints when drafting. Avoid self-referential phrasing that makes the brand sound like it discovered itself unless the user explicitly wants that style.
+- Treat each post as a creative angle, not just another copy of the campaign message. Reuse the campaign, not the exact overlays.
+- Before drafting a new post, check sibling posts in the same campaign and avoid reusing the same angle/copy family unless the user explicitly asks for a variant of an existing post.
 - For image generation, prefer hero-frame + variations over six independent generations whenever subject consistency matters.
 - If the user asks for a slideshow but the account, campaign, or offer is ambiguous, stop and ask a short clarifying question before generating assets.
 - If there is exactly one obvious account/campaign context already established in the current working tree, reuse it and say so briefly.
@@ -129,6 +131,17 @@ content/shortform-content/
             images/
               hero_frame.png
               slide1_raw.png
+              slide1.png
+              ...
+            ready-to-publish/
+              slide1.png
+              ...
+              caption.txt
+              package.json
+```
+
+Use this skill as the creation layer. Publishing, scheduling, and analytics should be separate adapters or later skills.
+raw.png
               slide1.png
               ...
             ready-to-publish/
