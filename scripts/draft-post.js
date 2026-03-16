@@ -139,6 +139,16 @@ function getAngleLibrary(ctx) {
   };
 }
 
+function inferAngleFromTexts(texts) {
+  const joined = (texts || []).join(' | ').toLowerCase();
+  if (joined.includes('too much process') || joined.includes('not enough\nprogress')) return 'process-overload';
+  if (joined.includes('another call') || joined.includes('meeting gravity') || joined.includes('too much alignment')) return 'meeting-fatigue';
+  if (joined.includes('retainer') || joined.includes('traction, not drag')) return 'retainer-drag';
+  if (joined.includes('founders usually need') || joined.includes('same ambition')) return 'founders-need-movement';
+  if (joined.includes('activity looks busy') || joined.includes('outcomes are what')) return 'outcomes-not-activity';
+  return null;
+}
+
 function collectUsedAngles(postDir) {
   const campaignDir = path.resolve(postDir, '..', '..');
   const postsDir = path.join(campaignDir, 'posts');
@@ -149,7 +159,13 @@ function collectUsedAngles(postDir) {
     const candidateDir = path.join(postsDir, entry.name);
     if (path.resolve(candidateDir) === path.resolve(postDir)) continue;
     const postJson = readJsonIfExists(path.join(candidateDir, 'post.json'));
-    if (postJson && postJson.angle) used.add(postJson.angle);
+    if (postJson && postJson.angle) {
+      used.add(postJson.angle);
+      continue;
+    }
+    const texts = readJsonIfExists(path.join(candidateDir, 'texts.json'));
+    const inferred = inferAngleFromTexts(texts);
+    if (inferred) used.add(inferred);
   }
   return used;
 }
