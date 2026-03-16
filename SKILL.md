@@ -18,6 +18,7 @@ Use this split:
 - `<account>/profile.json` as the single account file
 - `<account>/campaigns/<campaign>/brief.json` for campaign-specific messaging
 - `<account>/campaigns/<campaign>/posts/<post>/...` for concrete post assets
+- `<post>/images/` for generated and final slide images
 
 Do not wrap accounts in an extra `accounts/` folder when the repo only contains `defaults.json` plus account folders. Put account folders directly under the repo root.
 
@@ -30,36 +31,6 @@ That means language, voice, tone, style, overlay style, audience, visual identit
 
 Keep business identity out of `defaults.json`. Use `defaults.json` only for global technical defaults. Let `profile.json` overwrite those defaults per account.
 
-## Language handling
-
-`defaults.json` should include a default `language`.
-
-`profile.json` can override it with an account-specific `language`.
-
-When generating images or other language-sensitive assets, resolve language in this order:
-
-1. `profile.json`
-2. `defaults.json`
-
-Treat language as a real part of the effective configuration, not a decorative field.
-
-## Account onboarding rule
-
-When creating a brand-new account, do not pretend to know the account identity. If the user has not supplied enough context, ask a short onboarding set of questions first, then write `profile.json`.
-
-At minimum, try to collect:
-
-- language
-- account/topic description
-- audience
-- voice.tone
-- voice.style
-- voice.overlayStyle
-- visual.style
-- one or more offerings
-
-Provide examples when asking for tone/style/overlay style, and allow the user to write their own option instead of picking a preset.
-
 ## Workflow
 
 ### 1. Initialize a content repo
@@ -70,72 +41,41 @@ Use `scripts/init-project.js` to create a working directory for an account-centr
 
 Use `scripts/create-account.js` when the user wants the account skeleton only.
 
-Example:
-
-```bash
-node {baseDir}/scripts/create-account.js --dir content/shortform-content --account human-in-the-loop
-```
-
-This creates:
-
-- `<account>/profile.json`
-- `<account>/examples.md`
-
 ### 3. Create an account + campaign
 
 Use `scripts/create-campaign.js` when the user wants a campaign but does not want a post scaffold yet.
 
-Example:
-
-```bash
-node {baseDir}/scripts/create-campaign.js --dir content/shortform-content --account human-in-the-loop --campaign results-as-a-service-vs-traditional-agencies --title "Results as a Service vs Traditional Agencies" --offer "Results as a Service" --cta "See how Results as a Service works"
-```
-
-This creates:
-
-- `<account>/profile.json` if missing
-- `<account>/examples.md` if missing
-- `<account>/campaigns/<campaign>/brief.json`
-
 ### 4. Create an account + campaign + post
 
-Use `scripts/create-post.js` when the user explicitly wants a post scaffold.
+Use `scripts/create-post.js` when the user wants a post folder with starter files.
 
-Example:
+This creates the post folder and an `images/` subfolder for generated slide assets.
 
-```bash
-node {baseDir}/scripts/create-post.js --dir content/shortform-content --account human-in-the-loop --campaign results-as-a-service-vs-traditional-agencies --title "Results as a Service vs Traditional Agencies" --offer "Results as a Service" --cta "See how Results as a Service works"
-```
+### 5. Draft real post content
 
-This creates the account skeleton if missing, ensures the campaign exists, and creates a post scaffold under `posts/`.
+Use `scripts/draft-post.js` when the user asks to create a slideshow/post and expects real prompts, overlay text, and a caption rather than empty placeholders.
 
-### 5. Generate the raw images
+### 6. Generate the raw images
 
 Use `scripts/generate-images.js`.
 
-### 6. Add text overlays
+Pass the post directory to `--output`; the script will write generated files into `<post>/images/` automatically.
+
+Prefer hero-frame + variations when consistency matters. This generates a single `hero_frame.png` first, then derives later slides from it.
+
+### 7. Add text overlays
 
 Use `scripts/add-text-overlay.js`.
+
+Pass the post directory to `--input`; the script will read and write image files in `<post>/images/` automatically.
 
 This script uses `@napi-rs/canvas` as the overlay backend, chosen over `node-canvas` for better portability in a distributed skill.
 
 Keep text horizontally centered. Control vertical placement with `profile.render.overlay` safe-zone settings. Prefer `top-safe` for people-centric slideshows so text stays above the subject's face more often.
 
-Example:
-
-```bash
-node {baseDir}/scripts/add-text-overlay.js --input <post-dir> --texts <post-dir>/texts.json --profile content/shortform-content/human-in-the-loop/profile.json
-```
-
-### 7. Export a ready-to-post package
+### 8. Export a ready-to-post package
 
 Use `scripts/export-ready-package.js` to create a clean handoff folder containing only the final slide images, caption, and package manifest.
-
-Example:
-
-```bash
-node {baseDir}/scripts/export-ready-package.js --dir content/shortform-content/human-in-the-loop/campaigns/results-as-a-service-vs-traditional-agencies/posts/results-as-a-service-vs-traditional-agencies-v2
-```
 
 Use `scripts/build-post-package.js` only if you want a lightweight manifest in-place. Prefer `export-ready-package.js` for manual publishing handoff.
 
@@ -176,71 +116,21 @@ content/shortform-content/
       results-as-a-service-vs-traditional-agencies/
         brief.json
         posts/
-          2026-03-16-results-as-a-service-vs-traditional-agencies/
+          results-as-a-service-vs-traditional-agencies-v2/
             prompts.json
             texts.json
             caption.txt
-            slide1_raw.png
-            slide1.png
-            texts.used.json
-            package.json
-```
-
-Use this skill as the creation layer. Publishing, scheduling, and analytics should be separate adapters or later skills.
-`
-- For separating account identity from campaign-specific messaging: `references/account-profiles.md`
-
-## Output convention
-
-Prefer a tree like:
-
-```text
-content/shortform-content/
-  defaults.json
-  human-in-the-loop/
-    profile.json
-    examples.md
-    campaigns/
-      results-as-a-service-vs-traditional-agencies/
-        brief.json
-        posts/
-          2026-03-16-results-as-a-service-vs-traditional-agencies/
-            prompts.json
-            texts.json
-            caption.txt
-            slide1_raw.png
-            slide1.png
-            texts.used.json
-            package.json
-```
-
-Use this skill as the creation layer. Publishing, scheduling, and analytics should be separate adapters or later skills.
-he creation layer. Publishing, scheduling, and analytics should be separate adapters or later skills.
-`
-- For separating account identity from campaign-specific messaging: `references/account-profiles.md`
-
-## Output convention
-
-Prefer a tree like:
-
-```text
-content/shortform-content/
-  defaults.json
-  human-in-the-loop/
-    profile.json
-    examples.md
-    campaigns/
-      results-as-a-service-vs-traditional-agencies/
-        brief.json
-        posts/
-          2026-03-16-results-as-a-service-vs-traditional-agencies/
-            prompts.json
-            texts.json
-            caption.txt
-            slide1_raw.png
-            slide1.png
-            texts.used.json
-            package.json
+            post.json
+            images/
+              hero_frame.png
+              slide1_raw.png
+              slide1.png
+              ...
+            ready-to-publish/
+              slide1.png
+              ...
+              caption.txt
+              package.json
 ```
 
 Use this skill as the creation layer. Publishing, scheduling, and analytics should be separate adapters or later skills.

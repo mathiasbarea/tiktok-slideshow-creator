@@ -38,3 +38,15 @@ This skill uses an opinionated slideshow overlay layout inspired by the practica
 ```
 
 The goal is to be readable at a glance while scrolling.
+
+## Heuristic
+
+Prefer:
+- "Too many calls.\nToo many decks.\nSlow momentum."
+- "If you need speed,\nthat gets old\nvery fast."
+
+Avoid:
+- "process over\nprogress"
+- "friction, more\nmovement"
+
+Short copy should still feel natural when read out loud.

@@ -64,5 +64,7 @@ If slideshow consistency is important, describe the visual subject in a way that
 - prompts
 - overlay texts
 - caption
-- generated images
+- post metadata
+- an `images/` subfolder for generated images
+- exported package files
 - exported package files

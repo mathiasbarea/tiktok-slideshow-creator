@@ -30,7 +30,8 @@ function mergeConfig(defaults, profile) {
 
 const defaultsPath = getArg('defaults');
 const profilePath = getArg('profile');
-const outputDir = getArg('output');
+const outputDirArg = getArg('output');
+const outputDir = outputDirArg ? path.join(outputDirArg, 'images') : null;
 const promptsPath = getArg('prompts');
 const mode = getArg('mode') || 'hero-variations';
 

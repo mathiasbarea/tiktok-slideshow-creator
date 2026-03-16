@@ -36,12 +36,12 @@ function buildContext(profile, brief) {
 
 function generateTexts(ctx) {
   return [
-    'Some models sell\nprocess over\nprogress.',
-    'Too many calls,\ndecks, and slow\nmomentum.',
-    'If you need speed,\nthat gets old\nfast.',
+    'Too much process.\nNot enough\nprogress.',
+    'Too many calls.\nToo many decks.\nSlow momentum.',
+    'If you need speed,\nthat gets old\nvery fast.',
     'Same goal.\nLess overhead.\nMore shipping.',
-    'Less retainer\nfriction, more\nmovement.',
-    `${ctx.offer}\nfor teams that need\nreal momentum.`
+    'Less friction.\nMore movement.\nMore momentum.',
+    `${ctx.offer}.\nBuilt for teams that\nneed momentum.`
   ];
 }
 

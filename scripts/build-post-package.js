@@ -15,9 +15,10 @@ if (!dir) {
   process.exit(1);
 }
 
+const imagesDir = path.join(dir, 'images');
 const slides = [];
 for (let i = 1; i <= 6; i++) {
-  const p = path.join(dir, `slide${i}.png`);
+  const p = path.join(imagesDir, `slide${i}.png`);
   if (!fs.existsSync(p)) {
     console.error(`Missing ${p}`);
     process.exit(1);

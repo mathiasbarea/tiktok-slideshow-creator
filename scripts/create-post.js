@@ -38,8 +38,10 @@ const promptsPath = path.join(postDir, 'prompts.json');
 const textsPath = path.join(postDir, 'texts.json');
 const captionPath = path.join(postDir, 'caption.txt');
 const postConfigPath = path.join(postDir, 'post.json');
+const imagesDir = path.join(postDir, 'images');
 
 ensureDir(postDir);
+ensureDir(imagesDir);
 
 if (account.profile) console.log(`Created ${account.profilePath}`);
 if (account.examples) console.log(`Created ${account.examplesPath}`);

@@ -18,9 +18,10 @@ if (!dir) {
 const outDir = outDirArg || path.join(dir, 'ready-to-publish');
 fs.mkdirSync(outDir, { recursive: true });
 
+const imagesDir = path.join(dir, 'images');
 const slides = [];
 for (let i = 1; i <= 6; i++) {
-  const src = path.join(dir, `slide${i}.png`);
+  const src = path.join(imagesDir, `slide${i}.png`);
   const dest = path.join(outDir, `slide${i}.png`);
   if (!fs.existsSync(src)) {
     console.error(`Missing ${src}`);

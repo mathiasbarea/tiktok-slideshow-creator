@@ -9,12 +9,13 @@ function getArg(name) {
   return idx !== -1 ? args[idx + 1] : null;
 }
 
-const inputDir = getArg('input');
+const postDir = getArg('input');
 const textsPath = getArg('texts');
 const profilePath = getArg('profile');
+const inputDir = postDir ? path.join(postDir, 'images') : null;
 
-if (!inputDir || !textsPath) {
-  console.error('Usage: node add-text-overlay.js --input <dir> --texts <texts.json> [--profile <profile.json>]');
+if (!postDir || !textsPath) {
+  console.error('Usage: node add-text-overlay.js --input <post-dir> --texts <texts.json> [--profile <profile.json>]');
   process.exit(1);
 }
 
