@@ -48,7 +48,7 @@ Use this skill if you want to:
 ## 🗂️ Repository structure
 
 ```text
-content/tiktok-slideshow-creator/
+content/tiktok-slideshows/
   defaults.json
   <account>/
     profile.json
@@ -191,34 +191,34 @@ If you want to run the scripts directly, the basic flow is:
 
 
 ```
-node scripts/init-project.js --dir content/tiktok-slideshow-creator
+node scripts/init-project.js --dir content/tiktok-slideshows
 ```
 
 ### 2. Create an account
 
 
 ```
-node scripts/create-account.js --dir content/tiktok-slideshow-creator --account my-brand
+node scripts/create-account.js --dir content/tiktok-slideshows --account my-brand
 ```
 
 ### 3. Create a campaign
 
 
 ```
-node scripts/create-campaign.js --dir content/tiktok-slideshow-creator --account my-brand --campaign launch-angle
+node scripts/create-campaign.js --dir content/tiktok-slideshows --account my-brand --campaign launch-angle
 ```
 
 ### 4. Create a post scaffold
 
 
 ```
-node scripts/create-post.js --dir content/tiktok-slideshow-creator --account my-brand --campaign launch-angle --title "First slideshow"
+node scripts/create-post.js --dir content/tiktok-slideshows --account my-brand --campaign launch-angle --title "First slideshow"
 ```
 
 ### 5. Draft the post copy
 
 ```
-node scripts/draft-post.js --defaults content/tiktok-slideshow-creator/defaults.json --profile content/tiktok-slideshow-creator/my-brand/profile.json --brief <campaign-dir>/brief.json --post-dir <post-dir>
+node scripts/draft-post.js --defaults content/tiktok-slideshows/defaults.json --profile content/tiktok-slideshows/my-brand/profile.json --brief <campaign-dir>/brief.json --post-dir <post-dir>
 ```
 
 This writes prompts, overlay text, and captions into the target post folder.
@@ -226,13 +226,13 @@ This writes prompts, overlay text, and captions into the target post folder.
 ### 6. Generate images
 
 ```
-node scripts/generate-images.js --defaults content/tiktok-slideshow-creator/defaults.json --profile content/tiktok-slideshow-creator/my-brand/profile.json --output <post-dir> --prompts <post-dir>/prompts.json
+node scripts/generate-images.js --defaults content/tiktok-slideshows/defaults.json --profile content/tiktok-slideshows/my-brand/profile.json --output <post-dir> --prompts <post-dir>/prompts.json
 ```
 
 ### 7. Add overlays
 
 ```
-node scripts/add-text-overlay.js --input <post-dir> --texts <post-dir>/texts.json --profile content/tiktok-slideshow-creator/my-brand/profile.json
+node scripts/add-text-overlay.js --input <post-dir> --texts <post-dir>/texts.json --profile content/tiktok-slideshows/my-brand/profile.json
 ```
 
 ### 8. Export the final package

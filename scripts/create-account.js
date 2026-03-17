@@ -7,7 +7,7 @@ function getArg(name) {
   return idx !== -1 ? args[idx + 1] : null;
 }
 
-const rootDir = getArg('dir') || 'content/tiktok-slideshow-creator';
+const rootDir = getArg('dir') || 'content/tiktok-slideshows';
 const accountId = slugify(getArg('account'));
 
 if (!accountId) {

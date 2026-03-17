@@ -120,7 +120,7 @@ Use `scripts/build-post-package.js` only if you want a lightweight manifest in-p
 Prefer a tree like:
 
 ```text
-content/tiktok-slideshow-creator/
+content/tiktok-slideshows/
   defaults.json
   human-in-the-loop/
     profile.json
