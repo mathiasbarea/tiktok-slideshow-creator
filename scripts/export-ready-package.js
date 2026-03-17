@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const { execFileSync } = require('child_process');
 
 const args = process.argv.slice(2);
 function getArg(name) {
@@ -18,6 +20,25 @@ if (!dir) {
 const outDir = outDirArg || path.join(dir, 'ready-to-publish');
 fs.mkdirSync(outDir, { recursive: true });
 
+function createZipIfPossible(sourceDir, zipPath) {
+  try {
+    if (process.platform === 'win32') {
+      const psScript = [
+        `$ErrorActionPreference = 'Stop'`,
+        `$src = '${sourceDir.replace(/'/g, "''")}'`,
+        `$zip = '${zipPath.replace(/'/g, "''")}'`,
+        `if (Test-Path $zip) { Remove-Item $zip -Force }`,
+        `Compress-Archive -Path (Join-Path $src '*') -DestinationPath $zip -Force`
+      ].join('; ');
+      execFileSync('powershell.exe', ['-NoProfile', '-Command', psScript], { stdio: 'ignore' });
+      return true;
+    }
+  } catch (err) {
+    return false;
+  }
+  return false;
+}
+
 const imagesDir = path.join(dir, 'images');
 const slides = [];
 for (let i = 1; i <= 6; i++) {
@@ -32,17 +53,27 @@ for (let i = 1; i <= 6; i++) {
 }
 
 const captionSrc = path.join(dir, 'caption.txt');
+const shortCaptionSrc = path.join(dir, 'caption-short.txt');
 if (fs.existsSync(captionSrc)) {
   fs.copyFileSync(captionSrc, path.join(outDir, 'caption.txt'));
 }
+if (fs.existsSync(shortCaptionSrc)) {
+  fs.copyFileSync(shortCaptionSrc, path.join(outDir, 'caption-short.txt'));
+}
+
+const zipName = 'package-for-mobile.zip';
+const zipPath = path.join(outDir, zipName);
+const zipCreated = createZipIfPossible(outDir, zipPath);
 
 const manifest = {
   createdAt: new Date().toISOString(),
-  type: 'shortform-slideshow-ready-package',
-  readyFor: ['manual-upload', 'future-publishing-adapter'],
+  type: 'tiktok-slideshow-ready-package',
+  readyFor: ['manual-upload', 'manual-handoff'],
   slides,
   caption: fs.existsSync(captionSrc) ? 'caption.txt' : null,
-  notes: 'Upload slide1.png through slide6.png as a TikTok slideshow/carousel and use caption.txt as the post caption.'
+  shortCaption: fs.existsSync(shortCaptionSrc) ? 'caption-short.txt' : null,
+  mobilePackage: zipCreated ? zipName : null,
+  notes: 'Upload slide1.png through slide6.png as a TikTok slideshow/carousel. Prefer caption-short.txt for mobile/manual publishing.'
 };
 
 fs.writeFileSync(path.join(outDir, 'package.json'), JSON.stringify(manifest, null, 2));

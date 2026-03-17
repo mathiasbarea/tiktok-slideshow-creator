@@ -185,6 +185,30 @@ function generatePrompts(ctx, language, promptSlides) {
   };
 }
 
+function normalizeWhitespace(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function shortenOffer(offer, fallback) {
+  const clean = normalizeWhitespace(offer || fallback || 'the offer');
+  return clean.length > 72 ? fallback || 'the offer' : clean;
+}
+
+function buildShortCaption(ctx, angle) {
+  const offer = shortenOffer(ctx.offer, 'this model');
+  const cta = 'Check link in bio for more.';
+
+  const map = {
+    'process-overload': `Too much process. Not enough progress.\n\n${offer} helps teams move faster with less overhead.\n\n${cta}\n\n#startup #founders #agency #ai #operations`,
+    'meeting-fatigue': `Too many updates. Not enough movement.\n\n${offer} is built to reduce meeting gravity and help work actually ship.\n\n${cta}\n\n#startup #founders #agency #operations #ai`,
+    'retainer-drag': `Still paying, still waiting, still stuck.\n\n${offer} is built for visible traction, not retainer drag.\n\n${cta}\n\n#startup #founders #agency #growth #ai`,
+    'founders-need-movement': `Founders need movement, not more process.\n\n${offer} is built for teams that need momentum.\n\n${cta}\n\n#startup #founders #buildinpublic #execution #ai`,
+    'outcomes-not-activity': `Busy does not equal progress.\n\n${offer} is built around outcomes, not activity theater.\n\n${cta}\n\n#startup #founders #operations #agency #ai`
+  };
+
+  return map[angle] || `Less noise. More movement.\n\n${offer} helps teams move from activity to outcomes.\n\n${cta}\n\n#startup #founders #ai #operations`;
+}
+
 const defaultsPath = getArg('defaults');
 const profilePath = getArg('profile');
 const briefPath = getArg('brief');
@@ -215,10 +239,12 @@ if (!variant) {
 const promptsPath = path.join(postDir, 'prompts.json');
 const textsPath = path.join(postDir, 'texts.json');
 const captionPath = path.join(postDir, 'caption.txt');
+const shortCaptionPath = path.join(postDir, 'caption-short.txt');
 
 writeJson(promptsPath, generatePrompts(ctx, language, variant.promptSlides));
 writeJson(textsPath, variant.texts);
 fs.writeFileSync(captionPath, variant.caption + '\n');
+fs.writeFileSync(shortCaptionPath, buildShortCaption(ctx, angle) + '\n');
 
 post.status = 'drafted';
 post.language = language;

@@ -1,12 +1,12 @@
 {
-  "name": "shortform-content",
+  "name": "tiktok-slideshow-creator",
   "version": "1.0.0",
-  "description": "",
+  "description": "Create 6-slide TikTok slideshow packages with drafting, image generation, text overlays, and manual export tooling.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"No automated tests yet\""
   },
-  "keywords": [],
+  "keywords": ["tiktok", "slideshow", "openclaw", "skill", "content"],
   "author": "",
   "license": "ISC",
   "type": "commonjs",

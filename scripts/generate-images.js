@@ -77,11 +77,11 @@ if (!prompts.slides || prompts.slides.length !== slideCount) {
 }
 
 if (provider === 'openai' && !openaiApiKey) {
-  console.error('Missing OPENAI_API_KEY. Configure it via ~/.openclaw/openclaw.json under skills.entries.shortform-content.');
+  console.error('Missing OPENAI_API_KEY. Configure it via ~/.openclaw/openclaw.json under skills.entries.tiktok-slideshow-creator.');
   process.exit(1);
 }
 if (provider === 'gemini' && !geminiApiKey) {
-  console.error('Missing GEMINI_API_KEY. Configure it via ~/.openclaw/openclaw.json under skills.entries.shortform-content.env.GEMINI_API_KEY.');
+  console.error('Missing GEMINI_API_KEY. Configure it via ~/.openclaw/openclaw.json under skills.entries.tiktok-slideshow-creator.env.GEMINI_API_KEY.');
   process.exit(1);
 }
 
