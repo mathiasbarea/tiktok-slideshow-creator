@@ -2,6 +2,48 @@
 const fs = require('fs');
 const path = require('path');
 
+function processLogPathFor(outputDir) {
+  return path.join(outputDir, 'generation-process.log');
+}
+
+function appendProcessLog(outputDir, text) {
+  fs.appendFileSync(processLogPathFor(outputDir), text, 'utf8');
+}
+
+function logPathFor(outputDir) {
+  return path.join(outputDir, 'generation-log.json');
+}
+
+function readLog(outputDir) {
+  const p = logPathFor(outputDir);
+  if (!fs.existsSync(p)) return { attempts: [] };
+  try {
+    return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch {
+    return { attempts: [] };
+  }
+}
+
+function writeLog(outputDir, data) {
+  fs.writeFileSync(logPathFor(outputDir), JSON.stringify(data, null, 2));
+}
+
+function appendAttempt(outputDir, attempt) {
+  const log = readLog(outputDir);
+  log.attempts = Array.isArray(log.attempts) ? log.attempts : [];
+  log.attempts.push(attempt);
+  writeLog(outputDir, log);
+  return log.attempts.length - 1;
+}
+
+function updateAttempt(outputDir, index, patch) {
+  const log = readLog(outputDir);
+  log.attempts = Array.isArray(log.attempts) ? log.attempts : [];
+  if (!log.attempts[index]) log.attempts[index] = {};
+  log.attempts[index] = { ...log.attempts[index], ...patch };
+  writeLog(outputDir, log);
+}
+
 const args = process.argv.slice(2);
 function getArg(name) {
   const idx = args.indexOf(`--${name}`);
@@ -231,32 +273,97 @@ async function runHeroVariations() {
   }
 
   console.log(`Generating ${slideCount} raw slides using ${provider}/${model} at ${size} (language=${language}, mode=hero-variations)`);
+  appendProcessLog(outputDir, `\n===== generate-images attempt ${new Date().toISOString()} =====\n`);
+  appendProcessLog(outputDir, `mode=hero-variations provider=${provider} model=${model} slideCount=${slideCount}\n`);
   const heroPath = path.join(outputDir, 'hero_frame.png');
   const slide1Path = path.join(outputDir, 'slide1_raw.png');
-
-  if (!fs.existsSync(heroPath) || fs.statSync(heroPath).size <= 10000) {
-    console.log('Generating hero frame...');
-    await generateByProvider(heroPrompt(), heroPath, 1);
-    console.log(`Saved ${heroPath}`);
-  } else {
-    console.log('Reusing existing hero frame');
-  }
-
-  if (!fs.existsSync(slide1Path) || fs.statSync(slide1Path).size <= 10000) {
-    fs.copyFileSync(heroPath, slide1Path);
-    console.log(`Saved ${slide1Path} from hero frame`);
-  }
-
-  for (let i = 1; i < slideCount; i++) {
-    const outPath = path.join(outputDir, `slide${i + 1}_raw.png`);
-    if (fs.existsSync(outPath) && fs.statSync(outPath).size > 10000) {
-      console.log(`Skipping existing ${path.basename(outPath)}`);
-      continue;
+  const attemptIndex = appendAttempt(outputDir, {
+    startedAt: new Date().toISOString(),
+    mode: 'hero-variations',
+    provider,
+    model,
+    slideCount,
+    slides: []
+  });
+  try {
+    const heroEntry = { slide: 0, output: 'hero_frame.png', startedAt: new Date().toISOString() };
+    try {
+      if (!fs.existsSync(heroPath) || fs.statSync(heroPath).size <= 10000) {
+        console.log('Generating hero frame...');
+        appendProcessLog(outputDir, `hero: start generate hero_frame.png\n`);
+        await generateByProvider(heroPrompt(), heroPath, 1);
+        console.log(`Saved ${heroPath}`);
+        heroEntry.status = 'ok';
+        appendProcessLog(outputDir, `hero: ok bytes=${fs.existsSync(heroPath) ? fs.statSync(heroPath).size : 0}\n`);
+      } else {
+        console.log('Reusing existing hero frame');
+        heroEntry.status = 'skipped-existing';
+      }
+      heroEntry.bytes = fs.existsSync(heroPath) ? fs.statSync(heroPath).size : 0;
+    } catch (err) {
+      heroEntry.status = 'failed';
+      heroEntry.error = err.message || String(err);
+      heroEntry.timeoutDetected = /timeout|timed out|etimedout|deadline/i.test(heroEntry.error);
+      heroEntry.rateLimitDetected = /rate limit|429|quota/i.test(heroEntry.error);
+      throw err;
+    } finally {
+      heroEntry.finishedAt = new Date().toISOString();
+      const log = readLog(outputDir); log.attempts[attemptIndex].slides.push(heroEntry); writeLog(outputDir, log);
     }
-    const prompt = variationPrompt(prompts.slides[i], i + 1);
-    console.log(`Generating slide ${i + 1} from hero frame...`);
-    await editByProvider(heroPath, prompt, outPath);
-    console.log(`Saved ${outPath}`);
+
+    const slide1Entry = { slide: 1, output: 'slide1_raw.png', startedAt: new Date().toISOString() };
+    if (!fs.existsSync(slide1Path) || fs.statSync(slide1Path).size <= 10000) {
+      fs.copyFileSync(heroPath, slide1Path);
+      console.log(`Saved ${slide1Path} from hero frame`);
+      slide1Entry.status = 'ok';
+      appendProcessLog(outputDir, `slide 1: ok bytes=${fs.existsSync(slide1Path) ? fs.statSync(slide1Path).size : 0} source=hero_frame\n`);
+    } else {
+      slide1Entry.status = 'skipped-existing';
+      console.log(`Skipping existing ${path.basename(slide1Path)}`);
+    }
+    slide1Entry.bytes = fs.existsSync(slide1Path) ? fs.statSync(slide1Path).size : 0;
+    slide1Entry.finishedAt = new Date().toISOString();
+    { const log = readLog(outputDir); log.attempts[attemptIndex].slides.push(slide1Entry); writeLog(outputDir, log); }
+
+    for (let i = 1; i < slideCount; i++) {
+      const outPath = path.join(outputDir, `slide${i + 1}_raw.png`);
+      const slideEntry = { slide: i + 1, output: path.basename(outPath), startedAt: new Date().toISOString() };
+      if (fs.existsSync(outPath) && fs.statSync(outPath).size > 10000) {
+        slideEntry.status = 'skipped-existing';
+        slideEntry.bytes = fs.statSync(outPath).size;
+        slideEntry.finishedAt = new Date().toISOString();
+        { const log = readLog(outputDir); log.attempts[attemptIndex].slides.push(slideEntry); writeLog(outputDir, log); }
+        appendProcessLog(outputDir, `slide ${i + 1}: skipped-existing ${path.basename(outPath)} bytes=${slideEntry.bytes}\n`);
+        console.log(`Skipping existing ${path.basename(outPath)}`);
+        continue;
+      }
+      const prompt = variationPrompt(prompts.slides[i], i + 1);
+      console.log(`Generating slide ${i + 1} from hero frame...`);
+      try {
+        appendProcessLog(outputDir, `slide ${i + 1}: start edit ${path.basename(outPath)}\n`);
+        await editByProvider(heroPath, prompt, outPath);
+        slideEntry.status = 'ok';
+        slideEntry.bytes = fs.existsSync(outPath) ? fs.statSync(outPath).size : 0;
+        appendProcessLog(outputDir, `slide ${i + 1}: ok bytes=${slideEntry.bytes || 0}\n`);
+      } catch (err) {
+        slideEntry.status = 'failed';
+        slideEntry.error = err.message || String(err);
+        slideEntry.timeoutDetected = /timeout|timed out|etimedout|deadline/i.test(slideEntry.error);
+        slideEntry.rateLimitDetected = /rate limit|429|quota/i.test(slideEntry.error);
+        appendProcessLog(outputDir, `slide ${i + 1}: failed error=${slideEntry.error}\n`);
+        throw err;
+      } finally {
+        slideEntry.finishedAt = new Date().toISOString();
+        const log = readLog(outputDir); log.attempts[attemptIndex].slides.push(slideEntry); writeLog(outputDir, log);
+      }
+      console.log(`Saved ${outPath}`);
+    }
+    updateAttempt(outputDir, attemptIndex, { status: 'ok', finishedAt: new Date().toISOString() });
+    appendProcessLog(outputDir, `attempt status=ok\n`);
+  } catch (err) {
+    updateAttempt(outputDir, attemptIndex, { status: 'failed', finishedAt: new Date().toISOString(), error: err.message || String(err) });
+    appendProcessLog(outputDir, `attempt status=failed error=${err.message || String(err)}\n`);
+    throw err;
   }
 }
 

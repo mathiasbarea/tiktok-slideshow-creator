@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { execFileSync } = require('child_process');
 
 const args = process.argv.slice(2);
@@ -53,12 +52,8 @@ for (let i = 1; i <= 6; i++) {
 }
 
 const captionSrc = path.join(dir, 'caption.txt');
-const shortCaptionSrc = path.join(dir, 'caption-short.txt');
 if (fs.existsSync(captionSrc)) {
   fs.copyFileSync(captionSrc, path.join(outDir, 'caption.txt'));
-}
-if (fs.existsSync(shortCaptionSrc)) {
-  fs.copyFileSync(shortCaptionSrc, path.join(outDir, 'caption-short.txt'));
 }
 
 const zipName = 'package-for-mobile.zip';
@@ -71,9 +66,8 @@ const manifest = {
   readyFor: ['manual-upload', 'manual-handoff'],
   slides,
   caption: fs.existsSync(captionSrc) ? 'caption.txt' : null,
-  shortCaption: fs.existsSync(shortCaptionSrc) ? 'caption-short.txt' : null,
   mobilePackage: zipCreated ? zipName : null,
-  notes: 'Upload slide1.png through slide6.png as a TikTok slideshow/carousel. Prefer caption-short.txt for mobile/manual publishing.'
+  notes: 'Upload slide1.png through slide6.png as a TikTok slideshow/carousel and use caption.txt as the publishing caption.'
 };
 
 fs.writeFileSync(path.join(outDir, 'package.json'), JSON.stringify(manifest, null, 2));
