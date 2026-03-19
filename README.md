@@ -15,12 +15,12 @@ The skill does not handle publishing, scheduling, or analytics.
 When this skill runs inside OpenClaw, the canonical managed content root is:
 
 ```text
-C:\Users\mathi\.openclaw\workspace\content
+<openclaw-home>/workspace/content
 ```
 
-Do not create sibling roots like `C:\Users\mathi\.openclaw\workspace\tiktok-content` or nested roots like `C:\Users\mathi\.openclaw\workspace\content\tiktok-slideshows` unless the user explicitly asks for a custom location.
+Do not create sibling roots like `<openclaw-home>/workspace/tiktok-content` or nested roots like `<openclaw-home>/workspace/content/tiktok-slideshows` unless the user explicitly asks for a custom location.
 
-The scaffolding and idea scripts now default to that canonical root automatically when the skill is installed under `.openclaw/skills`. Outside OpenClaw, the same commands fall back to a local `content/` directory unless you pass `--dir` or `--content-root`.
+The scaffolding and idea scripts derive that root automatically when the skill is installed under `.openclaw/skills`. Outside OpenClaw, the same commands fall back to a local `content/` directory unless you pass `--dir` or `--content-root`.
 
 ## Requirements
 
@@ -218,7 +218,7 @@ node scripts/create-account.js --dir D:\content-lab --account my-brand
 node scripts/generate-post-idea.js --content-root D:\content-lab --account my-brand --campaign launch-angle
 ```
 
-When the skill is running from `.openclaw/skills`, it rejects alternate roots inside `C:\Users\mathi\.openclaw\workspace` so the agent cannot silently fork your content into parallel folders.
+When the skill is running from `.openclaw/skills`, it rejects alternate roots inside `<openclaw-home>/workspace` so the agent cannot silently fork your content into parallel folders.
 
 ## Guardrails
 
