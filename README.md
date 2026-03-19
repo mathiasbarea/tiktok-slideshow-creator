@@ -1,51 +1,22 @@
+# TikTok Slideshow Creator
 
-# 🎬 TikTok Slideshow Creator
+Create 6-slide TikTok slideshow packages from an account profile, campaign brief, and post folder.
 
-Create TikTok slideshow packages with scripts for drafting copy, generating images, adding text overlays, and exporting a ready-to-publish folder.
+This skill is now agent-first for creative generation:
 
----
+- the agent generates post ideas, prompts, overlay text, and `caption.txt`
+- the scripts build task payloads, validate freshness, and apply the generated JSON
+- API keys are only needed for image generation
 
-## 📖 Overview
+The skill does not handle publishing, scheduling, or analytics.
 
-TikTok Slideshow Creator is a skill focused on the **creation** side of image-first TikTok slideshows.
-
-It helps build a repeatable workflow around:
-
-- account profiles
-- campaign briefs
-- post folders
-- prompt drafting
-- image generation
-- text overlays
-- final export for manual upload
-
-> **Note:** It does **not** handle posting, scheduling, analytics, or social delivery.
-
----
-
-## 🎯 Who this is for
-
-Use this skill if you want to:
-
-- generate TikTok carousel/slideshow posts
-- keep brand/account settings separate from campaign briefs
-- reuse a consistent folder structure across multiple posts
-- generate images with OpenAI, Gemini, or local files
-- export a clean package ready for manual TikTok upload
-
----
-
-## 📋 Requirements
+## Requirements
 
 - Node.js 18+
 - `npm`
-- An API key only if you want API-based image generation:
-  - `OPENAI_API_KEY` for `openai`
-  - `GEMINI_API_KEY` for `gemini`
+- `OPENAI_API_KEY` or `GEMINI_API_KEY` only if you want API-based image generation
 
----
-
-## 🗂️ Repository structure
+## Repository structure
 
 ```text
 content/tiktok-slideshows/
@@ -58,223 +29,182 @@ content/tiktok-slideshows/
         brief.json
         posts/
           <post>/
+            post.json
             prompts.json
             texts.json
             caption.txt
-            post.json
             images/
             ready-to-publish/
-
 ```
 
-----------
+`defaults.json` is for shared technical defaults. Keep account identity in `profile.json`, campaign messaging in `brief.json`, and concrete creative assets in each post folder.
 
-## 🚀 Install
+## Supported image providers
 
-### 1. Provide your AI agent with this GitHub URL and ask it to install it for you.
+- `gemini`
+- `openai`
+- `local`
 
-```
-https://github.com/mathiasbarea/tiktok-slideshow-creator
-```
+Use `local` when you want to supply images manually instead of calling an image API.
 
-**If you are using OpenClaw, you can choose between two scopes:**
+## Install
 
--   **Global Installation:**  `.openclaw/skills`  (available to all agents).
--   **Workspace Installation:**  `<workspace>/skills`  (restricted to a specific agent).
+1. Install the skill into `.openclaw/skills` or a workspace-local skills folder.
+2. Run `npm install` inside the skill folder.
+3. Configure image-generation API keys outside project files only if you need API image generation.
 
+Example OpenClaw config:
 
-### 2. Install dependencies
-
-From inside the skill folder:
-
-
-
-```
-npm install
-```
-
-Main dependency:
-
--   `@napi-rs/canvas` Used to add text overlays on top of slide images.
-    
-
-----------
-
-## ⚙️ Configuration
-
-> Set API keys outside project files only when using API image generation.
-
-### Option 1: Environment variables
-
-```
-OPENAI_API_KEY=...
-GEMINI_API_KEY=...
-```
-
-You only need the key for the image provider you actually use.
-
-### Option 2 (OpenClaw only): OpenClaw config
-
-Configure environment variables for this skill in your OpenClaw config under the skill entry for `tiktok-slideshow-creator`.
-
-Should look something like this:
-```
-"skills": {
-  "tiktok-slideshow-creator": {
-    "enabled": true,
-    "env": {
-      "OPENAI_API_KEY": "YOUR-API-KEY-HERE",
-      "GEMINI_API_KEY": "YOUR-API-KEY-HERE"
+```json
+{
+  "skills": {
+    "tiktok-slideshow-creator": {
+      "enabled": true,
+      "env": {
+        "OPENAI_API_KEY": "YOUR-API-KEY-HERE",
+        "GEMINI_API_KEY": "YOUR-API-KEY-HERE"
+      }
     }
   }
 }
 ```
-----------
 
-## 🖼️ Supported image providers
+## Core flow
 
--   `gemini`
-    
--   `openai`
-    
--   `local`
-    
+### 1. Initialize a content repo
 
-Use `local` when you want to place images manually instead of calling an image API.
-
-The skill is now agent-first for creative generation:
-
-- the agent generates post ideas, prompts, overlay text, and `caption.txt`
-- the scripts build the prompt payloads and validate/apply the generated JSON
-- API keys are only needed for image generation
-
-----------
-
-## ⚡ Quick start
-
-Once the skill is installed and you have run `npm install`, ask your agent to use the `tiktok-slideshow-creator` skill and set up your first workflow.
-
-A simple way to start is:
-
-1.  Ask the agent to add an account for your TikTok brand or business.
-    
-    -   Example: your TikTok account name, brand name, or business identity.
-        
-2.  Ask the agent to create a campaign for that account.
-    
-    -   Example: `Why electric cars are better long term`
-        
-    -   The campaign should represent the message or angle you want to turn into multiple posts.
-        
-3.  Ask the agent to create the first post for that account and campaign.
-    
-    -   The agent should draft the prompts, overlay text, captions, and post structure.
-        
-4.  Once you're happy with the generated post, ask the agent to generate the slideshow images, apply overlays, and export the final package.
-    
-
-**Example requests you can give your agent:**
-
-> -   `Use the tiktok-slideshow-creator skill and create an account for my brand "GreenDrive".`
->     
-> -   `Create a campaign called "Why electric cars are better long term" for that account.`
->     
-> -   `Now create the first post for that campaign.`
->     
-> -   `Generate the slideshow images, add overlays, and export the final ready-to-publish package.`
->     
-
-If your account, campaign, or offer is still unclear, the agent should ask a short clarifying question before generating assets.
-
-----------
-
-## 💻 Optional CLI workflow
-
-If you want to run the scripts directly, the basic flow is:
-
-### 1. Initialize the project root
-
-
-```
+```bash
 node scripts/init-project.js --dir content/tiktok-slideshows
 ```
 
-### 2. Create an account
+### 2. Create the account and campaign structure
 
-
-```
+```bash
 node scripts/create-account.js --dir content/tiktok-slideshows --account my-brand
-```
-
-### 3. Create a campaign
-
-
-```
 node scripts/create-campaign.js --dir content/tiktok-slideshows --account my-brand --campaign launch-angle
 ```
 
-### 4. Create a post scaffold
+### 3. Create a post scaffold
 
-
-```
+```bash
 node scripts/create-post.js --dir content/tiktok-slideshows --account my-brand --campaign launch-angle --title "First slideshow"
 ```
 
-### 4. Generate a post idea
+`post.json` stores the editorial `angle` and the technical `templateFamily`. `caption.txt` is the only caption artifact and should already be short enough for TikTok.
+
+### 4. Build an idea task for the agent
 
 ```bash
-node scripts/generate-post-idea.js --content-root content/tiktok-slideshow-creator --account my-brand --campaign launch-angle
+node scripts/generate-post-idea.js --content-root content/tiktok-slideshows --account my-brand --campaign launch-angle
 ```
 
-Without additional input, this now returns the JSON task payload the agent or workflow should send to OpenClaw to generate a fresh idea.
+Without extra input, this returns a JSON task payload for the agent or workflow. The payload includes:
 
-To validate a generated idea JSON:
+- account and campaign context
+- recent post summaries
+- repetition signals from recent posts
+- the JSON schema the model should return
+
+The normalized idea contract is:
+
+- `postTitle`
+- `postSlug`
+- `angle`
+- `templateFamily`
+- `rationale`
+
+If you already have a generated idea JSON and want the skill to validate and normalize it:
 
 ```bash
-node scripts/generate-post-idea.js --content-root content/tiktok-slideshow-creator --account my-brand --campaign launch-angle --idea-file idea.json
+node scripts/generate-post-idea.js --content-root content/tiktok-slideshows --account my-brand --campaign launch-angle --idea-file idea.json
 ```
 
-### 5. Draft the post copy
+### 5. Build a draft task for the agent
 
-```
+```bash
 node scripts/draft-post.js --defaults content/tiktok-slideshows/defaults.json --profile content/tiktok-slideshows/my-brand/profile.json --brief <campaign-dir>/brief.json --post-dir <post-dir>
 ```
 
-Without additional input, this now returns the JSON task payload the agent or workflow should send to OpenClaw to generate the full draft package.
+Without extra input, this returns a JSON task payload for the agent or workflow to generate:
 
-To apply an agent-generated draft JSON into the post folder:
+- `prompts.json`
+- `texts.json`
+- `caption.txt`
+
+The draft JSON accepted by the skill resolves to:
+
+- `postTitle`
+- `angle`
+- `templateFamily`
+- `prompts`
+- `texts`
+- `caption`
+
+To validate and apply an agent-generated draft:
 
 ```bash
 node scripts/draft-post.js --defaults content/tiktok-slideshows/defaults.json --profile content/tiktok-slideshows/my-brand/profile.json --brief <campaign-dir>/brief.json --post-dir <post-dir> --draft-file draft.json
 ```
 
-This writes `prompts.json`, `texts.json`, and a short `caption.txt`.
-
 ### 6. Generate images
 
-```
+```bash
 node scripts/generate-images.js --defaults content/tiktok-slideshows/defaults.json --profile content/tiktok-slideshows/my-brand/profile.json --output <post-dir> --prompts <post-dir>/prompts.json
 ```
 
+The script writes into `<post-dir>/images/`. It prefers `hero_frame.png` plus variations for consistency and also records generation logs for retries and diagnostics.
+
 ### 7. Add overlays
 
-```
+```bash
 node scripts/add-text-overlay.js --input <post-dir> --texts <post-dir>/texts.json --profile content/tiktok-slideshows/my-brand/profile.json
 ```
 
-### 8. Export the final package
+### 8. Export the ready package
 
-```
+```bash
 node scripts/export-ready-package.js --dir <post-dir>
 ```
 
 This creates `ready-to-publish/` with:
 
--   `slide1.png` to `slide6.png`
-    
--   `caption.txt`
-    
--   `package.json`
-    
--   `package-for-mobile.zip` when zip creation is available
-   
+- final slide images
+- `caption.txt`
+- `package.json`
+- `package-for-mobile.zip` when zip creation is available
+
+## Freshness and non-repetition
+
+The skill now hardens against repetition in two ways:
+
+1. It gives the agent recent-post context and explicit blocked signals.
+2. It validates the returned JSON before accepting it.
+
+The validation rejects ideas or drafts that are too close to recent posts, including:
+
+- repeated post titles
+- repeated slug families
+- repeated editorial angles
+- template families reused too recently
+- repeated first-slide hook openings
+- repeated overlay copy families
+- repeated caption openings
+- captions that are too similar to recent captions
+
+If a generated idea or draft fails freshness validation, the script exits with an error instead of silently accepting repeated copy.
+
+## Guardrails
+
+- Do not promise automatic TikTok posting unless a separate publishing adapter exists.
+- Keep secrets out of prompts and long-lived plain-text files.
+- Use only one caption artifact: `caption.txt`.
+- Keep `caption.txt` short, plain text, and mobile-readable.
+- Treat each post as a distinct creative angle, not just a restatement of the campaign message.
+- Prefer hero-frame plus variations over six unrelated images when subject consistency matters.
+
+## References
+
+- `references/slide-structure.md`
+- `references/prompting.md`
+- `references/text-overlay.md`
+- `references/account-profiles.md`

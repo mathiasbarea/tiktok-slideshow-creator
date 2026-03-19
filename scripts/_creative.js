@@ -4,6 +4,8 @@ const { slugify } = require('./_lib');
 
 const DEFAULT_SLIDE_COUNT = 6;
 const DEFAULT_CAPTION_MAX_CHARS = 500;
+const TITLE_SIMILARITY_THRESHOLD = 0.72;
+const CAPTION_SIMILARITY_THRESHOLD = 0.82;
 const SUPPORTED_TEMPLATE_FAMILIES = [
   {
     id: 'process-overload',
@@ -47,6 +49,66 @@ function writeJson(filePath, value) {
 
 function normalizeText(value) {
   return String(value || '').replace(/\r\n/g, '\n').trim();
+}
+
+function normalizeComparableText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function comparableWords(value) {
+  return normalizeComparableText(value).split(' ').filter(Boolean);
+}
+
+function leadingWordsKey(value, count = 4) {
+  return comparableWords(value).slice(0, count).join(' ');
+}
+
+function sharedLeadingWords(a, b, count = 4) {
+  const left = comparableWords(a).slice(0, count);
+  const right = comparableWords(b).slice(0, count);
+  if (left.length < count || right.length < count) return false;
+  return left.every((word, index) => word === right[index]);
+}
+
+function asWordSet(value) {
+  return new Set(comparableWords(value));
+}
+
+function jaccardSimilarity(a, b) {
+  const left = asWordSet(a);
+  const right = asWordSet(b);
+  if (left.size === 0 || right.size === 0) return 0;
+
+  let intersection = 0;
+  for (const word of left) {
+    if (right.has(word)) intersection += 1;
+  }
+
+  const union = new Set([...left, ...right]).size;
+  return union === 0 ? 0 : intersection / union;
+}
+
+function stripDatePrefix(value) {
+  return String(value || '').replace(/^\d{4}-\d{2}-\d{2}-/, '');
+}
+
+function slugBaseForComparison(value) {
+  return slugify(stripDatePrefix(value));
+}
+
+function buildOverlayFingerprint(values) {
+  if (!Array.isArray(values)) return '';
+  return values
+    .map((value) => normalizeComparableText(value))
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(' | ');
 }
 
 function truncateText(value, maxChars) {
@@ -127,6 +189,7 @@ function summarizePost(postDir, entry) {
     hookOpening: overlayTextSample[0] || '',
     captionExcerpt: truncateText(caption, 220),
     captionOpening: extractCaptionOpening(caption),
+    overlayFingerprint: buildOverlayFingerprint(texts),
     lastModifiedAt: new Date(stat.mtimeMs).toISOString(),
   };
 }
@@ -160,8 +223,14 @@ function buildRepetitionSignals(recentPosts) {
   return {
     recentAngles: Array.from(new Set(recentPosts.map((post) => post.angle).filter(Boolean))).slice(0, 12),
     recentTemplateFamilies: Array.from(new Set(recentPosts.map((post) => post.templateFamily).filter(Boolean))).slice(0, 12),
+    blockedPostTitles: Array.from(new Set(recentPosts.map((post) => post.postTitle).filter(Boolean))).slice(0, 12),
+    blockedPostSlugBases: Array.from(new Set(recentPosts.map((post) => slugBaseForComparison(post.postSlug)).filter(Boolean))).slice(0, 12),
     blockedHookOpenings: Array.from(new Set(recentPosts.map((post) => post.hookOpening).filter(Boolean))).slice(0, 12),
+    blockedHookPrefixes: Array.from(new Set(recentPosts.map((post) => leadingWordsKey(post.hookOpening, 4)).filter(Boolean))).slice(0, 12),
     blockedCaptionOpenings: Array.from(new Set(recentPosts.map((post) => post.captionOpening).filter(Boolean))).slice(0, 12),
+    blockedCaptionPrefixes: Array.from(new Set(recentPosts.map((post) => leadingWordsKey(post.captionOpening, 5)).filter(Boolean))).slice(0, 12),
+    blockedOverlayFingerprints: Array.from(new Set(recentPosts.map((post) => post.overlayFingerprint).filter(Boolean))).slice(0, 12),
+    templateCooldownWindow: recentPosts.slice(0, 2).map((post) => post.templateFamily).filter(Boolean),
   };
 }
 
@@ -204,6 +273,7 @@ function buildCreativeReferences() {
       'Write overlay text that feels native to TikTok, not like presentation labels.',
       'Aim for 2 to 4 short lines per slide and roughly 4 to 6 words per line.',
       'Keep slide 1 especially punchy and avoid repeating recent opening hooks.',
+      'Do not reuse the same first-slide opening, overlay sequence, or copy family from the recent post set.',
       'Do not use emojis, generic motivational cliches, or empty jargon.'
     ],
     promptingRules: [
@@ -216,6 +286,7 @@ function buildCreativeReferences() {
       'Caption must be plain text only.',
       'Keep it short for TikTok: 2 or 3 short paragraphs max and no more than 5 hashtags.',
       'Avoid repeating caption openings or CTA wording from recent posts.',
+      'If the new caption feels too close to a recent one, rewrite it until the opening and progression are clearly different.',
       'Do not use emojis, bullets, labels, quotation marks, or self-referential phrasing.'
     ],
     templateFamilies: SUPPORTED_TEMPLATE_FAMILIES,
@@ -355,6 +426,7 @@ function buildIdeaTaskPayload({ contentRoot, account, campaign }) {
     'Create one fresh TikTok slideshow post idea for this account and campaign.',
     'Return JSON only.',
     'Do not repeat recent post angles, template families, hook openings, caption openings, or copy families.',
+    'Do not reuse a recent post title, slug family, or the same title opening.',
     'Keep the post title short and punchy.',
     'Use templateFamily as the nearest drafting/rendering family, but keep angle as a fresh editorial label.',
     'postSlug must be kebab-case and should start with the provided datePrefix unless a better existing convention is explicitly required.',
@@ -409,6 +481,7 @@ function buildDraftTaskPayload({ defaultsPath, profilePath, briefPath, postDir }
     'Draft one complete TikTok slideshow package for this post.',
     'Return JSON only.',
     'Write fresh copy that fits the account voice and avoids reusing recent hooks, caption openings, or copy families.',
+    'Do not reuse a recent title opening, overlay opening, overlay sequence, or caption opening.',
     'texts must contain exactly the required number of overlay entries and each entry should feel native to TikTok.',
     'prompts.base must lock scene identity and prompts.slides must show believable progression across the same person and workspace.',
     `caption must stay under ${DEFAULT_CAPTION_MAX_CHARS} characters, be plain text only, and already be optimized for TikTok.`,
@@ -423,9 +496,61 @@ function buildDraftTaskPayload({ defaultsPath, profilePath, briefPath, postDir }
   };
 }
 
-function normalizeIdeaOutput(raw, { datePrefix }) {
+function validateFreshIdea({ postTitle, postSlug, angle, templateFamily, recentPosts = [] }) {
+  const issues = [];
+  const comparableTitle = normalizeComparableText(postTitle);
+  const comparableAngle = normalizeComparableText(angle);
+  const comparableSlugBase = slugBaseForComparison(postSlug);
+  const recentTemplateCooldown = recentPosts.slice(0, 2).map((post) => post.templateFamily).filter(Boolean);
+
+  for (const recentPost of recentPosts) {
+    if (normalizeComparableText(recentPost.postTitle) === comparableTitle) {
+      issues.push(`postTitle duplicates recent title "${recentPost.postTitle}"`);
+      break;
+    }
+  }
+
+  for (const recentPost of recentPosts) {
+    if (slugBaseForComparison(recentPost.postSlug) === comparableSlugBase) {
+      issues.push(`postSlug reuses recent slug family "${recentPost.postSlug}"`);
+      break;
+    }
+  }
+
+  for (const recentPost of recentPosts) {
+    if (normalizeComparableText(recentPost.angle) === comparableAngle) {
+      issues.push(`angle repeats recent angle "${recentPost.angle}"`);
+      break;
+    }
+  }
+
+  for (const recentPost of recentPosts) {
+    if (sharedLeadingWords(postTitle, recentPost.postTitle, 3)) {
+      issues.push(`postTitle starts too similarly to recent title "${recentPost.postTitle}"`);
+      break;
+    }
+  }
+
+  for (const recentPost of recentPosts) {
+    const similarity = jaccardSimilarity(postTitle, recentPost.postTitle);
+    if (similarity >= TITLE_SIMILARITY_THRESHOLD) {
+      issues.push(`postTitle is too similar to recent title "${recentPost.postTitle}"`);
+      break;
+    }
+  }
+
+  if (templateFamily && recentTemplateCooldown.includes(templateFamily)) {
+    issues.push(`templateFamily "${templateFamily}" was used too recently`);
+  }
+
+  if (issues.length > 0) {
+    throw new Error(`Idea is too similar to recent posts: ${issues.join('; ')}`);
+  }
+}
+
+function normalizeIdeaOutput(raw, { datePrefix, recentPosts = [] }) {
   const idea = unwrapModelJson(raw);
-  const postTitle = normalizeText(idea?.postTitle);
+  const postTitle = firstNonEmpty(normalizeText(idea?.postTitle), normalizeText(idea?.title));
   const angle = normalizeText(idea?.angle);
   const rationale = normalizeText(idea?.rationale);
   const templateFamily = normalizeText(idea?.templateFamily);
@@ -441,6 +566,14 @@ function normalizeIdeaOutput(raw, { datePrefix }) {
     postSlug = `${datePrefix}-${postSlug}`;
   }
 
+  validateFreshIdea({
+    postTitle,
+    postSlug,
+    angle,
+    templateFamily,
+    recentPosts,
+  });
+
   return {
     postTitle,
     postSlug,
@@ -450,7 +583,70 @@ function normalizeIdeaOutput(raw, { datePrefix }) {
   };
 }
 
-function normalizeDraftOutput(raw, { slideCount, fallbackPost }) {
+function validateFreshDraft({ postTitle, postSlug, angle, templateFamily, texts, caption, recentPosts = [] }) {
+  validateFreshIdea({
+    postTitle,
+    postSlug,
+    angle,
+    templateFamily,
+    recentPosts,
+  });
+
+  const issues = [];
+  const hookOpening = texts[0] || '';
+  const overlayFingerprint = buildOverlayFingerprint(texts);
+  const captionOpening = extractCaptionOpening(caption);
+  const normalizedCaption = normalizeComparableText(caption);
+
+  for (const recentPost of recentPosts) {
+    if (normalizeComparableText(recentPost.hookOpening) === normalizeComparableText(hookOpening)) {
+      issues.push(`slide 1 hook duplicates recent hook opening from "${recentPost.postTitle}"`);
+      break;
+    }
+  }
+
+  for (const recentPost of recentPosts) {
+    if (sharedLeadingWords(hookOpening, recentPost.hookOpening, 4)) {
+      issues.push(`slide 1 hook starts too similarly to "${recentPost.postTitle}"`);
+      break;
+    }
+  }
+
+  for (const recentPost of recentPosts) {
+    if (recentPost.overlayFingerprint && recentPost.overlayFingerprint === overlayFingerprint) {
+      issues.push(`overlay copy family duplicates recent post "${recentPost.postTitle}"`);
+      break;
+    }
+  }
+
+  for (const recentPost of recentPosts) {
+    if (normalizeComparableText(recentPost.captionOpening) === normalizeComparableText(captionOpening)) {
+      issues.push(`caption opening duplicates recent caption from "${recentPost.postTitle}"`);
+      break;
+    }
+  }
+
+  for (const recentPost of recentPosts) {
+    if (sharedLeadingWords(captionOpening, recentPost.captionOpening, 5)) {
+      issues.push(`caption opening starts too similarly to "${recentPost.postTitle}"`);
+      break;
+    }
+  }
+
+  for (const recentPost of recentPosts) {
+    const similarity = jaccardSimilarity(normalizedCaption, recentPost.captionExcerpt);
+    if (similarity >= CAPTION_SIMILARITY_THRESHOLD) {
+      issues.push(`caption is too similar to recent post "${recentPost.postTitle}"`);
+      break;
+    }
+  }
+
+  if (issues.length > 0) {
+    throw new Error(`Draft is too similar to recent posts: ${issues.join('; ')}`);
+  }
+}
+
+function normalizeDraftOutput(raw, { slideCount, fallbackPost, recentPosts = [] }) {
   const draft = unwrapModelJson(raw);
   const prompts = draft?.prompts || {};
   const basePrompt = normalizeText(prompts.base);
@@ -459,7 +655,7 @@ function normalizeDraftOutput(raw, { slideCount, fallbackPost }) {
   const caption = normalizeCaption(draft?.caption);
   const templateFamily = firstNonEmpty(normalizeText(draft?.templateFamily), fallbackPost.templateFamily);
   const angle = firstNonEmpty(normalizeText(draft?.angle), fallbackPost.angle, templateFamily);
-  const postTitle = firstNonEmpty(normalizeText(draft?.postTitle), fallbackPost.postTitle);
+  const postTitle = firstNonEmpty(normalizeText(draft?.postTitle), normalizeText(draft?.title), fallbackPost.postTitle);
   const rationale = firstNonEmpty(normalizeText(draft?.rationale), fallbackPost.rationale, '');
 
   if (!basePrompt) throw new Error('Draft JSON must include prompts.base.');
@@ -479,6 +675,16 @@ function normalizeDraftOutput(raw, { slideCount, fallbackPost }) {
   if (!SUPPORTED_TEMPLATE_FAMILIES.some((family) => family.id === templateFamily)) {
     throw new Error(`Unsupported templateFamily: ${templateFamily}`);
   }
+
+  validateFreshDraft({
+    postTitle,
+    postSlug: fallbackPost.postSlug || postTitle,
+    angle,
+    templateFamily,
+    texts,
+    caption,
+    recentPosts,
+  });
 
   return {
     postTitle,
@@ -547,7 +753,10 @@ module.exports = {
   buildCreativeReferences,
   collectRecentPosts,
   getSlideCount,
+  jaccardSimilarity,
+  leadingWordsKey,
   normalizeCaption,
+  normalizeComparableText,
   normalizeDraftOutput,
   normalizeIdeaOutput,
   pickLanguage,

@@ -46,6 +46,7 @@ async function main() {
   const rawIdea = ideaFile ? readJson(ideaFile) : JSON.parse(stdinText);
   const idea = normalizeIdeaOutput(rawIdea, {
     datePrefix: task.input.runtime.datePrefix,
+    recentPosts: task.input.recentPosts,
   });
 
   process.stdout.write(`${JSON.stringify(idea, null, 2)}\n`);

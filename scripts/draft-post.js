@@ -58,10 +58,12 @@ async function main() {
     slideCount: task.input.constraints.slideCount,
     fallbackPost: {
       postTitle: task.input.post.postTitle,
+      postSlug: task.input.post.postSlug,
       angle: task.input.post.angle,
       templateFamily: task.input.post.templateFamily,
       rationale: task.input.post.rationale,
     },
+    recentPosts: task.input.recentPosts,
   });
 
   const defaults = readJson(defaultsPath);
