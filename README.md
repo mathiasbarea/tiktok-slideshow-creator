@@ -10,6 +10,18 @@ This skill is now agent-first for creative generation:
 
 The skill does not handle publishing, scheduling, or analytics.
 
+## Canonical content root
+
+When this skill runs inside OpenClaw, the canonical managed content root is:
+
+```text
+C:\Users\mathi\.openclaw\workspace\content
+```
+
+Do not create sibling roots like `C:\Users\mathi\.openclaw\workspace\tiktok-content` or nested roots like `C:\Users\mathi\.openclaw\workspace\content\tiktok-slideshows` unless the user explicitly asks for a custom location.
+
+The scaffolding and idea scripts now default to that canonical root automatically when the skill is installed under `.openclaw/skills`. Outside OpenClaw, the same commands fall back to a local `content/` directory unless you pass `--dir` or `--content-root`.
+
 ## Requirements
 
 - Node.js 18+
@@ -19,7 +31,7 @@ The skill does not handle publishing, scheduling, or analytics.
 ## Repository structure
 
 ```text
-content/
+<content-root>/
   defaults.json
   <account>/
     profile.json
@@ -75,20 +87,20 @@ Example OpenClaw config:
 ### 1. Initialize a content repo
 
 ```bash
-node scripts/init-project.js --dir content
+node scripts/init-project.js
 ```
 
 ### 2. Create the account and campaign structure
 
 ```bash
-node scripts/create-account.js --dir content --account my-brand
-node scripts/create-campaign.js --dir content --account my-brand --campaign launch-angle
+node scripts/create-account.js --account my-brand
+node scripts/create-campaign.js --account my-brand --campaign launch-angle
 ```
 
 ### 3. Create a post scaffold
 
 ```bash
-node scripts/create-post.js --dir content --account my-brand --campaign launch-angle --title "First slideshow"
+node scripts/create-post.js --account my-brand --campaign launch-angle --title "First slideshow"
 ```
 
 `post.json` stores the editorial `angle`, the technical `templateFamily`, the `campaignId`, and platform metadata. New posts default to a folder name like `YYYY-MM-DD-slideshow-first-slideshow`. `caption.txt` is the only caption artifact and should already be short enough for TikTok.
@@ -96,7 +108,7 @@ node scripts/create-post.js --dir content --account my-brand --campaign launch-a
 ### 4. Build an idea task for the agent
 
 ```bash
-node scripts/generate-post-idea.js --content-root content --account my-brand --campaign launch-angle
+node scripts/generate-post-idea.js --account my-brand --campaign launch-angle
 ```
 
 Without extra input, this returns a JSON task payload for the agent or workflow. The payload includes:
@@ -117,13 +129,13 @@ The normalized idea contract is:
 If you already have a generated idea JSON and want the skill to validate and normalize it:
 
 ```bash
-node scripts/generate-post-idea.js --content-root content --account my-brand --campaign launch-angle --idea-file idea.json
+node scripts/generate-post-idea.js --account my-brand --campaign launch-angle --idea-file idea.json
 ```
 
 ### 5. Build a draft task for the agent
 
 ```bash
-node scripts/draft-post.js --defaults content/defaults.json --profile content/my-brand/profile.json --brief <campaign-dir>/brief.json --post-dir <post-dir>
+node scripts/draft-post.js --defaults <content-root>/defaults.json --profile <content-root>/my-brand/profile.json --brief <campaign-dir>/brief.json --post-dir <post-dir>
 ```
 
 Without extra input, this returns a JSON task payload for the agent or workflow to generate:
@@ -144,13 +156,13 @@ The draft JSON accepted by the skill resolves to:
 To validate and apply an agent-generated draft:
 
 ```bash
-node scripts/draft-post.js --defaults content/defaults.json --profile content/my-brand/profile.json --brief <campaign-dir>/brief.json --post-dir <post-dir> --draft-file draft.json
+node scripts/draft-post.js --defaults <content-root>/defaults.json --profile <content-root>/my-brand/profile.json --brief <campaign-dir>/brief.json --post-dir <post-dir> --draft-file draft.json
 ```
 
 ### 6. Generate images
 
 ```bash
-node scripts/generate-images.js --defaults content/defaults.json --profile content/my-brand/profile.json --output <post-dir> --prompts <post-dir>/prompts.json
+node scripts/generate-images.js --defaults <content-root>/defaults.json --profile <content-root>/my-brand/profile.json --output <post-dir> --prompts <post-dir>/prompts.json
 ```
 
 The script writes into `<post-dir>/images/`. It prefers `hero_frame.png` plus variations for consistency and also records generation logs for retries and diagnostics.
@@ -158,7 +170,7 @@ The script writes into `<post-dir>/images/`. It prefers `hero_frame.png` plus va
 ### 7. Add overlays
 
 ```bash
-node scripts/add-text-overlay.js --input <post-dir> --texts <post-dir>/texts.json --profile content/my-brand/profile.json
+node scripts/add-text-overlay.js --input <post-dir> --texts <post-dir>/texts.json --profile <content-root>/my-brand/profile.json
 ```
 
 ### 8. Export the ready package
@@ -181,7 +193,7 @@ The skill now hardens against repetition in two ways:
 1. It gives the agent recent-post context and explicit blocked signals.
 2. It validates the returned JSON before accepting it.
 
-The freshness scope is now account-wide inside TikTok. The skill reviews the latest 50 posts in `content/<account>/tiktok/posts/`, regardless of campaign.
+The freshness scope is now account-wide inside TikTok. The skill reviews the latest 50 posts in `<content-root>/<account>/tiktok/posts/`, regardless of campaign.
 
 The validation rejects ideas or drafts that are too close to recent posts, including:
 
@@ -195,6 +207,18 @@ The validation rejects ideas or drafts that are too close to recent posts, inclu
 - captions that are too similar to recent captions
 
 If a generated idea or draft fails freshness validation, the script exits with an error instead of silently accepting repeated copy.
+
+## Custom roots
+
+If you intentionally want to manage content outside the canonical OpenClaw root, pass an explicit external path:
+
+```bash
+node scripts/init-project.js --dir D:\content-lab
+node scripts/create-account.js --dir D:\content-lab --account my-brand
+node scripts/generate-post-idea.js --content-root D:\content-lab --account my-brand --campaign launch-angle
+```
+
+When the skill is running from `.openclaw/skills`, it rejects alternate roots inside `C:\Users\mathi\.openclaw\workspace` so the agent cannot silently fork your content into parallel folders.
 
 ## Guardrails
 

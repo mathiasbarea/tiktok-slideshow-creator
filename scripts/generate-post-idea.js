@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 const fs = require('fs');
+const { resolveContentRoot } = require('./_content-root');
 const {
   buildIdeaTaskPayload,
   normalizeIdeaOutput,
@@ -25,13 +26,13 @@ function readStdin() {
 }
 
 async function main() {
-  const contentRoot = getArg('content-root');
+  const contentRoot = resolveContentRoot(getArg('content-root'), { scriptDir: __dirname });
   const account = getArg('account');
   const campaign = getArg('campaign');
   const ideaFile = getArg('idea-file');
 
-  if (!contentRoot || !account || !campaign) {
-    console.error('Usage: node generate-post-idea.js --content-root <dir> --account <id> --campaign <id> [--idea-file <idea.json>]');
+  if (!account || !campaign) {
+    console.error('Usage: node generate-post-idea.js [--content-root <dir>] --account <id> --campaign <id> [--idea-file <idea.json>]');
     process.exit(1);
   }
 

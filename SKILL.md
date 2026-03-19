@@ -9,6 +9,14 @@ Create image-first TikTok slideshow packages. Keep publishing and analytics sepa
 
 Use this skill as a focused creation pipeline for 6-slide TikTok slideshows. Build from shared defaults, an account profile, a campaign brief, and a concrete post folder. Generate the draft copy, image prompts, raw images, final overlaid slides, and an export folder ready for manual upload.
 
+Inside OpenClaw, the canonical managed content root is `C:\Users\mathi\.openclaw\workspace\content`.
+
+When this skill is used from OpenClaw:
+- reuse `C:\Users\mathi\.openclaw\workspace\content`
+- do not invent alternative roots like `tiktok-content` or `content/tiktok-slideshows`
+- do not create another content repo under `C:\Users\mathi\.openclaw\workspace` unless the user explicitly asks for a different location
+- prefer omitting `--dir` and `--content-root` so the scripts resolve the canonical root automatically
+
 ## Architecture
 
 Use this structure:
@@ -41,6 +49,8 @@ Creative generation is agent-first:
 ### 1. Initialize a content repo
 
 Use `scripts/init-project.js` to create a working directory for the slideshow project.
+
+Inside OpenClaw, this should initialize `C:\Users\mathi\.openclaw\workspace\content`.
 
 ### 2. Create only an account
 
@@ -111,6 +121,7 @@ Use `scripts/build-post-package.js` only if you want a lightweight manifest in-p
 - If the user asks for a new account only, do not scaffold a campaign or post.
 - If the user asks for a new campaign only, do not scaffold a post.
 - If the user asks for a slideshow/post/carousel, do not stop at scaffolding unless they explicitly asked for scaffolding only; draft actual prompts, overlay text, and captions.
+- Inside OpenClaw, keep all managed content under `C:\Users\mathi\.openclaw\workspace\content`.
 - Respect account voice/profile constraints when drafting. Avoid self-referential phrasing unless the user explicitly wants it.
 - Treat each post as a creative angle, not just another copy of the campaign message.
 - Before drafting a new post, check the most recent TikTok posts for the whole account and avoid reusing the same angle/copy family unless the user explicitly asks for a variant.
@@ -131,7 +142,7 @@ Use `scripts/build-post-package.js` only if you want a lightweight manifest in-p
 Prefer a tree like:
 
 ```text
-content/
+C:\Users\mathi\.openclaw\workspace\content\
   defaults.json
   human-in-the-loop/
     profile.json
