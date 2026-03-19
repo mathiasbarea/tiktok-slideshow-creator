@@ -39,7 +39,7 @@ Use this skill if you want to:
 
 - Node.js 18+
 - `npm`
-- An API key if using API-based generation or dynamic captions:
+- An API key only if you want API-based image generation:
   - `OPENAI_API_KEY` for `openai`
   - `GEMINI_API_KEY` for `gemini`
 
@@ -102,7 +102,7 @@ Main dependency:
 
 ## ⚙️ Configuration
 
-> ⚠️ Set API keys **outside** project files.
+> Set API keys outside project files only when using API image generation.
 
 ### Option 1: Environment variables
 
@@ -111,7 +111,7 @@ OPENAI_API_KEY=...
 GEMINI_API_KEY=...
 ```
 
-You only need the key for the provider you actually use.
+You only need the key for the image provider you actually use.
 
 ### Option 2 (OpenClaw only): OpenClaw config
 
@@ -142,7 +142,11 @@ Should look something like this:
 
 Use `local` when you want to place images manually instead of calling an image API.
 
-Use a single `caption.txt` artifact. It should already be short and optimized for TikTok.
+The skill is now agent-first for creative generation:
+
+- the agent generates post ideas, prompts, overlay text, and `caption.txt`
+- the scripts build the prompt payloads and validate/apply the generated JSON
+- API keys are only needed for image generation
 
 ----------
 
@@ -222,7 +226,13 @@ node scripts/create-post.js --dir content/tiktok-slideshows --account my-brand -
 node scripts/generate-post-idea.js --content-root content/tiktok-slideshow-creator --account my-brand --campaign launch-angle
 ```
 
-This returns a structured idea for the next post, including a suggested angle, title, rationale, and slug, while trying to avoid repeating angles already used in sibling posts.
+Without additional input, this now returns the JSON task payload the agent or workflow should send to OpenClaw to generate a fresh idea.
+
+To validate a generated idea JSON:
+
+```bash
+node scripts/generate-post-idea.js --content-root content/tiktok-slideshow-creator --account my-brand --campaign launch-angle --idea-file idea.json
+```
 
 ### 5. Draft the post copy
 
@@ -230,9 +240,15 @@ This returns a structured idea for the next post, including a suggested angle, t
 node scripts/draft-post.js --defaults content/tiktok-slideshows/defaults.json --profile content/tiktok-slideshows/my-brand/profile.json --brief <campaign-dir>/brief.json --post-dir <post-dir>
 ```
 
-This writes prompts, overlay text, and captions into the target post folder.
+Without additional input, this now returns the JSON task payload the agent or workflow should send to OpenClaw to generate the full draft package.
 
-`caption.txt` is now the only caption artifact and it is generated dynamically from the account profile, campaign brief, post metadata, and slide copy.
+To apply an agent-generated draft JSON into the post folder:
+
+```bash
+node scripts/draft-post.js --defaults content/tiktok-slideshows/defaults.json --profile content/tiktok-slideshows/my-brand/profile.json --brief <campaign-dir>/brief.json --post-dir <post-dir> --draft-file draft.json
+```
+
+This writes `prompts.json`, `texts.json`, and a short `caption.txt`.
 
 ### 6. Generate images
 

@@ -30,6 +30,11 @@ Supported image providers currently include:
 
 Use a single `caption.txt` artifact. It should already be short and optimized for TikTok.
 
+Creative generation is agent-first:
+- the agent should generate the post idea, prompts, overlay text, and caption
+- the scripts should build task payloads and apply/validate the agent output
+- API keys are only for image generation
+
 ## Workflow
 
 ### 1. Initialize a content repo
@@ -59,7 +64,9 @@ This script should produce:
 - `texts.json`
 - `caption.txt`
 
-This script should generate `caption.txt` dynamically from the account profile, campaign brief, post metadata, slide texts, and recent sibling captions in the same campaign.
+This script should not call external text-generation APIs. Instead it should either:
+- emit a structured draft task payload the agent can use to generate creative JSON
+- or apply a generated draft JSON into `prompts.json`, `texts.json`, and `caption.txt`
 
 Default caption style:
 - short and concise
@@ -98,7 +105,7 @@ Use `scripts/build-post-package.js` only if you want a lightweight manifest in-p
 - Do not promise automatic TikTok posting unless a separate publishing adapter exists.
 - Do not mix analytics or monetization logic into the creation pipeline.
 - Keep secrets out of prompts and long-lived plain-text files.
-- Configure `OPENAI_API_KEY` or `GEMINI_API_KEY` outside project files.
+- Configure `OPENAI_API_KEY` or `GEMINI_API_KEY` outside project files only when using API image generation.
 - Prefer manual publishing after the creative pipeline is stable.
 - If the user asks for a new account only, do not scaffold a campaign or post.
 - If the user asks for a new campaign only, do not scaffold a post.
