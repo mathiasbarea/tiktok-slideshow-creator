@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 const path = require('path');
-const { slugify, ensureDir, writeJsonIfMissing, writeTextIfMissing, ensureAccount, ensureCampaign } = require('./_lib');
+const {
+  ensureAccount,
+  ensureCampaign,
+  ensureDir,
+  slugify,
+  writeJsonIfMissing,
+  writeTextIfMissing,
+} = require('./_lib');
 
 const args = process.argv.slice(2);
 function getArg(name) {
@@ -8,11 +15,12 @@ function getArg(name) {
   return idx !== -1 ? args[idx + 1] : null;
 }
 
-const rootDir = getArg('dir') || 'content/tiktok-slideshows';
+const rootDir = getArg('dir') || 'content';
 const accountId = slugify(getArg('account'));
 const campaignId = slugify(getArg('campaign'));
 const postTitle = getArg('title') || 'untitled-post';
-const postSlug = getArg('post') ? slugify(getArg('post')) : `${new Date().toISOString().slice(0,10)}-${slugify(postTitle)}`;
+const datePrefix = new Date().toISOString().slice(0, 10);
+const postSlug = getArg('post') ? slugify(getArg('post')) : `${datePrefix}-slideshow-${slugify(postTitle)}`;
 const offer = getArg('offer') || '';
 const cta = getArg('cta') || '';
 const message = getArg('message') || '';
@@ -33,7 +41,7 @@ const campaign = ensureCampaign(rootDir, accountId, campaignId, {
   notes: []
 });
 
-const postsDir = path.join(campaign.campaignDir, 'posts');
+const postsDir = account.postsDir;
 const postDir = path.join(postsDir, postSlug);
 const promptsPath = path.join(postDir, 'prompts.json');
 const textsPath = path.join(postDir, 'texts.json');
@@ -74,6 +82,10 @@ if (writeTextIfMissing(captionPath, 'Draft the caption here.\n')) console.log(`C
 if (writeJsonIfMissing(postConfigPath, {
   accountId,
   campaignId,
+  platform: 'tiktok',
+  format: 'slideshow',
+  createdAt: new Date().toISOString(),
+  status: 'scaffolded',
   postTitle,
   postSlug,
   offer,

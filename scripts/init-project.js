@@ -8,7 +8,7 @@ function getArg(name) {
   return idx !== -1 ? args[idx + 1] : null;
 }
 
-const dir = getArg('dir') || 'content/tiktok-slideshows';
+const dir = getArg('dir') || 'content';
 fs.mkdirSync(dir, { recursive: true });
 
 const files = {

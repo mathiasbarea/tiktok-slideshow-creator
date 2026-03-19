@@ -21,9 +21,9 @@ This keeps intent clear and avoids generating post scaffolds when the user only 
 
 - `defaults.json`
 - `<account-id>/profile.json`
-- `<account-id>/examples.md`
 - `<account-id>/campaigns/<campaign-id>/brief.json`
-- `<account-id>/campaigns/<campaign-id>/posts/<post-id>/...`
+- `<account-id>/tiktok/examples.md`
+- `<account-id>/tiktok/posts/<YYYY-MM-DD-slideshow-post-id>/...`
 
 ## Put in defaults.json
 

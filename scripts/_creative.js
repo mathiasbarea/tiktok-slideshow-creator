@@ -4,8 +4,11 @@ const { slugify } = require('./_lib');
 
 const DEFAULT_SLIDE_COUNT = 6;
 const DEFAULT_CAPTION_MAX_CHARS = 500;
+const DEFAULT_RECENT_POST_LIMIT = 50;
+const DEFAULT_TEMPLATE_FAMILY_COOLDOWN = 5;
 const TITLE_SIMILARITY_THRESHOLD = 0.72;
 const CAPTION_SIMILARITY_THRESHOLD = 0.82;
+const TIKTOK_PLATFORM = 'tiktok';
 const SUPPORTED_TEMPLATE_FAMILIES = [
   {
     id: 'process-overload',
@@ -98,8 +101,40 @@ function stripDatePrefix(value) {
   return String(value || '').replace(/^\d{4}-\d{2}-\d{2}-/, '');
 }
 
+function stripSlideshowPrefix(value) {
+  return String(value || '').replace(/^slideshow-/, '');
+}
+
 function slugBaseForComparison(value) {
-  return slugify(stripDatePrefix(value));
+  return slugify(stripSlideshowPrefix(stripDatePrefix(value)));
+}
+
+function extractPostDateFromSlug(value) {
+  const match = String(value || '').match(/^(\d{4}-\d{2}-\d{2})-/);
+  return match ? match[1] : '';
+}
+
+function toSortableTimestamp(postJson, entryName, fallbackMs) {
+  const explicit = firstNonEmpty(postJson?.createdAt, postJson?.postDate);
+  const slugDate = extractPostDateFromSlug(entryName);
+  const candidates = [
+    explicit,
+    slugDate ? `${slugDate}T00:00:00.000Z` : '',
+  ];
+
+  for (const candidate of candidates) {
+    const parsed = Date.parse(candidate);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+
+  return fallbackMs;
+}
+
+function normalizePostSlug(value, datePrefix) {
+  const rawSlug = slugify(value);
+  const baseSlug = stripSlideshowPrefix(stripDatePrefix(rawSlug));
+  const finalBase = baseSlug || 'untitled-post';
+  return `${datePrefix}-slideshow-${finalBase}`;
 }
 
 function buildOverlayFingerprint(values) {
@@ -182,6 +217,7 @@ function summarizePost(postDir, entry) {
   return {
     postSlug: entry.name,
     postTitle: postJson.postTitle || postJson.title || entry.name,
+    campaignId: postJson.campaignId || '',
     angle: postJson.angle || '',
     templateFamily: postJson.templateFamily || '',
     rationale: postJson.ideaRationale || '',
@@ -194,7 +230,7 @@ function summarizePost(postDir, entry) {
   };
 }
 
-function collectRecentPosts(postsDir, { excludePostDir = null, limit = 12 } = {}) {
+function collectRecentPosts(postsDir, { excludePostDir = null, limit = DEFAULT_RECENT_POST_LIMIT } = {}) {
   if (!fs.existsSync(postsDir)) return [];
 
   const entries = fs.readdirSync(postsDir, { withFileTypes: true })
@@ -202,9 +238,15 @@ function collectRecentPosts(postsDir, { excludePostDir = null, limit = 12 } = {}
     .map((entry) => {
       const fullPath = path.join(postsDir, entry.name);
       const stat = fs.statSync(fullPath);
-      return { entry, fullPath, mtimeMs: stat.mtimeMs };
+      const postJson = readJsonIfExists(path.join(fullPath, 'post.json'), {}) || {};
+      return {
+        entry,
+        fullPath,
+        sortMs: toSortableTimestamp(postJson, entry.name, stat.mtimeMs),
+        mtimeMs: stat.mtimeMs,
+      };
     })
-    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+    .sort((a, b) => (b.sortMs - a.sortMs) || (b.mtimeMs - a.mtimeMs));
 
   const recent = [];
   for (const candidate of entries) {
@@ -221,16 +263,16 @@ function collectRecentPosts(postsDir, { excludePostDir = null, limit = 12 } = {}
 
 function buildRepetitionSignals(recentPosts) {
   return {
-    recentAngles: Array.from(new Set(recentPosts.map((post) => post.angle).filter(Boolean))).slice(0, 12),
-    recentTemplateFamilies: Array.from(new Set(recentPosts.map((post) => post.templateFamily).filter(Boolean))).slice(0, 12),
-    blockedPostTitles: Array.from(new Set(recentPosts.map((post) => post.postTitle).filter(Boolean))).slice(0, 12),
-    blockedPostSlugBases: Array.from(new Set(recentPosts.map((post) => slugBaseForComparison(post.postSlug)).filter(Boolean))).slice(0, 12),
-    blockedHookOpenings: Array.from(new Set(recentPosts.map((post) => post.hookOpening).filter(Boolean))).slice(0, 12),
-    blockedHookPrefixes: Array.from(new Set(recentPosts.map((post) => leadingWordsKey(post.hookOpening, 4)).filter(Boolean))).slice(0, 12),
-    blockedCaptionOpenings: Array.from(new Set(recentPosts.map((post) => post.captionOpening).filter(Boolean))).slice(0, 12),
-    blockedCaptionPrefixes: Array.from(new Set(recentPosts.map((post) => leadingWordsKey(post.captionOpening, 5)).filter(Boolean))).slice(0, 12),
-    blockedOverlayFingerprints: Array.from(new Set(recentPosts.map((post) => post.overlayFingerprint).filter(Boolean))).slice(0, 12),
-    templateCooldownWindow: recentPosts.slice(0, 2).map((post) => post.templateFamily).filter(Boolean),
+    recentAngles: Array.from(new Set(recentPosts.map((post) => post.angle).filter(Boolean))),
+    recentTemplateFamilies: Array.from(new Set(recentPosts.map((post) => post.templateFamily).filter(Boolean))),
+    blockedPostTitles: Array.from(new Set(recentPosts.map((post) => post.postTitle).filter(Boolean))),
+    blockedPostSlugBases: Array.from(new Set(recentPosts.map((post) => slugBaseForComparison(post.postSlug)).filter(Boolean))),
+    blockedHookOpenings: Array.from(new Set(recentPosts.map((post) => post.hookOpening).filter(Boolean))),
+    blockedHookPrefixes: Array.from(new Set(recentPosts.map((post) => leadingWordsKey(post.hookOpening, 4)).filter(Boolean))),
+    blockedCaptionOpenings: Array.from(new Set(recentPosts.map((post) => post.captionOpening).filter(Boolean))),
+    blockedCaptionPrefixes: Array.from(new Set(recentPosts.map((post) => leadingWordsKey(post.captionOpening, 5)).filter(Boolean))),
+    blockedOverlayFingerprints: Array.from(new Set(recentPosts.map((post) => post.overlayFingerprint).filter(Boolean))),
+    templateCooldownWindow: recentPosts.slice(0, DEFAULT_TEMPLATE_FAMILY_COOLDOWN).map((post) => post.templateFamily).filter(Boolean),
   };
 }
 
@@ -400,12 +442,12 @@ function buildDraftSchema(slideCount) {
 function buildIdeaTaskPayload({ contentRoot, account, campaign }) {
   const profilePath = path.join(contentRoot, account, 'profile.json');
   const briefPath = path.join(contentRoot, account, 'campaigns', campaign, 'brief.json');
-  const examplesPath = path.join(contentRoot, account, 'examples.md');
-  const postsDir = path.join(contentRoot, account, 'campaigns', campaign, 'posts');
+  const examplesPath = path.join(contentRoot, account, TIKTOK_PLATFORM, 'examples.md');
+  const postsDir = path.join(contentRoot, account, TIKTOK_PLATFORM, 'posts');
 
   const profile = readJson(profilePath);
   const brief = readJson(briefPath);
-  const recentPosts = collectRecentPosts(postsDir, { limit: 12 });
+  const recentPosts = collectRecentPosts(postsDir, { limit: DEFAULT_RECENT_POST_LIMIT });
   const repetitionSignals = buildRepetitionSignals(recentPosts);
 
   const input = {
@@ -425,11 +467,11 @@ function buildIdeaTaskPayload({ contentRoot, account, campaign }) {
   const prompt = [
     'Create one fresh TikTok slideshow post idea for this account and campaign.',
     'Return JSON only.',
-    'Do not repeat recent post angles, template families, hook openings, caption openings, or copy families.',
+    'Do not repeat recent post angles, hook openings, caption openings, or copy families across the recent account-level TikTok post set.',
     'Do not reuse a recent post title, slug family, or the same title opening.',
     'Keep the post title short and punchy.',
     'Use templateFamily as the nearest drafting/rendering family, but keep angle as a fresh editorial label.',
-    'postSlug must be kebab-case and should start with the provided datePrefix unless a better existing convention is explicitly required.',
+    'postSlug must be kebab-case and should normalize to the pattern YYYY-MM-DD-slideshow-your-post-name.',
   ].join(' ');
 
   return {
@@ -446,10 +488,10 @@ function buildDraftTaskPayload({ defaultsPath, profilePath, briefPath, postDir }
   const brief = readJson(briefPath);
   const post = readJsonIfExists(path.join(postDir, 'post.json'), {}) || {};
   const slideCount = getSlideCount(defaults, profile);
-  const examplesPath = path.join(path.dirname(profilePath), 'examples.md');
+  const examplesPath = path.resolve(postDir, '..', '..', 'examples.md');
   const postsDir = path.resolve(postDir, '..');
   const context = buildContext(defaults, profile, brief, post);
-  const recentPosts = collectRecentPosts(postsDir, { excludePostDir: postDir, limit: 12 });
+  const recentPosts = collectRecentPosts(postsDir, { excludePostDir: postDir, limit: DEFAULT_RECENT_POST_LIMIT });
 
   const input = {
     context,
@@ -480,7 +522,7 @@ function buildDraftTaskPayload({ defaultsPath, profilePath, briefPath, postDir }
   const prompt = [
     'Draft one complete TikTok slideshow package for this post.',
     'Return JSON only.',
-    'Write fresh copy that fits the account voice and avoids reusing recent hooks, caption openings, or copy families.',
+    'Write fresh copy that fits the account voice and avoids reusing recent hooks, caption openings, or copy families from the recent account-level TikTok post set.',
     'Do not reuse a recent title opening, overlay opening, overlay sequence, or caption opening.',
     'texts must contain exactly the required number of overlay entries and each entry should feel native to TikTok.',
     'prompts.base must lock scene identity and prompts.slides must show believable progression across the same person and workspace.',
@@ -501,7 +543,7 @@ function validateFreshIdea({ postTitle, postSlug, angle, templateFamily, recentP
   const comparableTitle = normalizeComparableText(postTitle);
   const comparableAngle = normalizeComparableText(angle);
   const comparableSlugBase = slugBaseForComparison(postSlug);
-  const recentTemplateCooldown = recentPosts.slice(0, 2).map((post) => post.templateFamily).filter(Boolean);
+  const recentTemplateCooldown = recentPosts.slice(0, DEFAULT_TEMPLATE_FAMILY_COOLDOWN).map((post) => post.templateFamily).filter(Boolean);
 
   for (const recentPost of recentPosts) {
     if (normalizeComparableText(recentPost.postTitle) === comparableTitle) {
@@ -561,10 +603,7 @@ function normalizeIdeaOutput(raw, { datePrefix, recentPosts = [] }) {
     throw new Error('Idea JSON is missing one of: postTitle, angle, rationale, templateFamily.');
   }
 
-  let postSlug = slugify(slugBase);
-  if (!postSlug.startsWith(`${datePrefix}-`)) {
-    postSlug = `${datePrefix}-${postSlug}`;
-  }
+  const postSlug = normalizePostSlug(slugBase, datePrefix);
 
   validateFreshIdea({
     postTitle,

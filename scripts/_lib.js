@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const TIKTOK_PLATFORM = 'tiktok';
+
 function slugify(value) {
   return String(value || '')
     .toLowerCase()
@@ -28,6 +30,26 @@ function writeTextIfMissing(filePath, value) {
     return true;
   }
   return false;
+}
+
+function getAccountDir(rootDir, accountId) {
+  return path.join(rootDir, accountId);
+}
+
+function getCampaignsDir(rootDir, accountId) {
+  return path.join(getAccountDir(rootDir, accountId), 'campaigns');
+}
+
+function getCampaignDir(rootDir, accountId, campaignId) {
+  return path.join(getCampaignsDir(rootDir, accountId), campaignId);
+}
+
+function getPlatformDir(rootDir, accountId, platform = TIKTOK_PLATFORM) {
+  return path.join(getAccountDir(rootDir, accountId), platform);
+}
+
+function getPostsDir(rootDir, accountId, platform = TIKTOK_PLATFORM) {
+  return path.join(getPlatformDir(rootDir, accountId, platform), 'posts');
 }
 
 function defaultProfile(accountId) {
@@ -73,25 +95,30 @@ function defaultProfile(accountId) {
 }
 
 function ensureAccount(rootDir, accountId) {
-  const accountDir = path.join(rootDir, accountId);
+  const accountDir = getAccountDir(rootDir, accountId);
+  const platformDir = getPlatformDir(rootDir, accountId);
+  const postsDir = getPostsDir(rootDir, accountId);
   const profilePath = path.join(accountDir, 'profile.json');
-  const examplesPath = path.join(accountDir, 'examples.md');
+  const examplesPath = path.join(platformDir, 'examples.md');
   ensureDir(accountDir);
+  ensureDir(platformDir);
+  ensureDir(postsDir);
 
   const created = {
     accountDir,
+    platformDir,
+    postsDir,
     profilePath,
     examplesPath,
     profile: writeJsonIfMissing(profilePath, defaultProfile(accountId)),
-    examples: writeTextIfMissing(examplesPath, `# ${accountId}\n\nAdd tone, hooks, caption examples, and onboarding notes here.\n`)
+    examples: writeTextIfMissing(examplesPath, `# ${accountId} TikTok\n\nAdd TikTok hooks, captions, and platform-specific examples here.\n`)
   };
 
   return created;
 }
 
 function ensureCampaign(rootDir, accountId, campaignId, brief = {}) {
-  const accountDir = path.join(rootDir, accountId);
-  const campaignDir = path.join(accountDir, 'campaigns', campaignId);
+  const campaignDir = getCampaignDir(rootDir, accountId, campaignId);
   const briefPath = path.join(campaignDir, 'brief.json');
   ensureDir(campaignDir);
 
@@ -110,10 +137,16 @@ function ensureCampaign(rootDir, accountId, campaignId, brief = {}) {
 }
 
 module.exports = {
-  slugify,
-  ensureDir,
-  writeJsonIfMissing,
-  writeTextIfMissing,
   ensureAccount,
-  ensureCampaign
+  ensureCampaign,
+  ensureDir,
+  getAccountDir,
+  getCampaignDir,
+  getCampaignsDir,
+  getPlatformDir,
+  getPostsDir,
+  slugify,
+  TIKTOK_PLATFORM,
+  writeJsonIfMissing,
+  writeTextIfMissing
 };

@@ -19,25 +19,26 @@ The skill does not handle publishing, scheduling, or analytics.
 ## Repository structure
 
 ```text
-content/tiktok-slideshows/
+content/
   defaults.json
   <account>/
     profile.json
-    examples.md
     campaigns/
       <campaign>/
         brief.json
-        posts/
-          <post>/
-            post.json
-            prompts.json
-            texts.json
-            caption.txt
-            images/
-            ready-to-publish/
+    tiktok/
+      examples.md
+      posts/
+        <YYYY-MM-DD-slideshow-post-name>/
+          post.json
+          prompts.json
+          texts.json
+          caption.txt
+          images/
+          ready-to-publish/
 ```
 
-`defaults.json` is for shared technical defaults. Keep account identity in `profile.json`, campaign messaging in `brief.json`, and concrete creative assets in each post folder.
+`defaults.json` is for shared technical defaults. Keep account identity in `profile.json`, campaign messaging in account-level `campaigns/<campaign>/brief.json`, and concrete TikTok assets in `tiktok/posts/<post>/`.
 
 ## Supported image providers
 
@@ -74,35 +75,35 @@ Example OpenClaw config:
 ### 1. Initialize a content repo
 
 ```bash
-node scripts/init-project.js --dir content/tiktok-slideshows
+node scripts/init-project.js --dir content
 ```
 
 ### 2. Create the account and campaign structure
 
 ```bash
-node scripts/create-account.js --dir content/tiktok-slideshows --account my-brand
-node scripts/create-campaign.js --dir content/tiktok-slideshows --account my-brand --campaign launch-angle
+node scripts/create-account.js --dir content --account my-brand
+node scripts/create-campaign.js --dir content --account my-brand --campaign launch-angle
 ```
 
 ### 3. Create a post scaffold
 
 ```bash
-node scripts/create-post.js --dir content/tiktok-slideshows --account my-brand --campaign launch-angle --title "First slideshow"
+node scripts/create-post.js --dir content --account my-brand --campaign launch-angle --title "First slideshow"
 ```
 
-`post.json` stores the editorial `angle` and the technical `templateFamily`. `caption.txt` is the only caption artifact and should already be short enough for TikTok.
+`post.json` stores the editorial `angle`, the technical `templateFamily`, the `campaignId`, and platform metadata. New posts default to a folder name like `YYYY-MM-DD-slideshow-first-slideshow`. `caption.txt` is the only caption artifact and should already be short enough for TikTok.
 
 ### 4. Build an idea task for the agent
 
 ```bash
-node scripts/generate-post-idea.js --content-root content/tiktok-slideshows --account my-brand --campaign launch-angle
+node scripts/generate-post-idea.js --content-root content --account my-brand --campaign launch-angle
 ```
 
 Without extra input, this returns a JSON task payload for the agent or workflow. The payload includes:
 
 - account and campaign context
-- recent post summaries
-- repetition signals from recent posts
+- recent account-level TikTok post summaries
+- repetition signals from the recent account-level TikTok post set
 - the JSON schema the model should return
 
 The normalized idea contract is:
@@ -116,13 +117,13 @@ The normalized idea contract is:
 If you already have a generated idea JSON and want the skill to validate and normalize it:
 
 ```bash
-node scripts/generate-post-idea.js --content-root content/tiktok-slideshows --account my-brand --campaign launch-angle --idea-file idea.json
+node scripts/generate-post-idea.js --content-root content --account my-brand --campaign launch-angle --idea-file idea.json
 ```
 
 ### 5. Build a draft task for the agent
 
 ```bash
-node scripts/draft-post.js --defaults content/tiktok-slideshows/defaults.json --profile content/tiktok-slideshows/my-brand/profile.json --brief <campaign-dir>/brief.json --post-dir <post-dir>
+node scripts/draft-post.js --defaults content/defaults.json --profile content/my-brand/profile.json --brief <campaign-dir>/brief.json --post-dir <post-dir>
 ```
 
 Without extra input, this returns a JSON task payload for the agent or workflow to generate:
@@ -143,13 +144,13 @@ The draft JSON accepted by the skill resolves to:
 To validate and apply an agent-generated draft:
 
 ```bash
-node scripts/draft-post.js --defaults content/tiktok-slideshows/defaults.json --profile content/tiktok-slideshows/my-brand/profile.json --brief <campaign-dir>/brief.json --post-dir <post-dir> --draft-file draft.json
+node scripts/draft-post.js --defaults content/defaults.json --profile content/my-brand/profile.json --brief <campaign-dir>/brief.json --post-dir <post-dir> --draft-file draft.json
 ```
 
 ### 6. Generate images
 
 ```bash
-node scripts/generate-images.js --defaults content/tiktok-slideshows/defaults.json --profile content/tiktok-slideshows/my-brand/profile.json --output <post-dir> --prompts <post-dir>/prompts.json
+node scripts/generate-images.js --defaults content/defaults.json --profile content/my-brand/profile.json --output <post-dir> --prompts <post-dir>/prompts.json
 ```
 
 The script writes into `<post-dir>/images/`. It prefers `hero_frame.png` plus variations for consistency and also records generation logs for retries and diagnostics.
@@ -157,7 +158,7 @@ The script writes into `<post-dir>/images/`. It prefers `hero_frame.png` plus va
 ### 7. Add overlays
 
 ```bash
-node scripts/add-text-overlay.js --input <post-dir> --texts <post-dir>/texts.json --profile content/tiktok-slideshows/my-brand/profile.json
+node scripts/add-text-overlay.js --input <post-dir> --texts <post-dir>/texts.json --profile content/my-brand/profile.json
 ```
 
 ### 8. Export the ready package
@@ -180,12 +181,14 @@ The skill now hardens against repetition in two ways:
 1. It gives the agent recent-post context and explicit blocked signals.
 2. It validates the returned JSON before accepting it.
 
+The freshness scope is now account-wide inside TikTok. The skill reviews the latest 50 posts in `content/<account>/tiktok/posts/`, regardless of campaign.
+
 The validation rejects ideas or drafts that are too close to recent posts, including:
 
 - repeated post titles
 - repeated slug families
 - repeated editorial angles
-- template families reused too recently
+- template families reused inside a short cooldown window
 - repeated first-slide hook openings
 - repeated overlay copy families
 - repeated caption openings

@@ -15,8 +15,9 @@ Use this structure:
 
 - `defaults.json` at the repo root for shared technical defaults
 - `<account>/profile.json` as the main account file
-- `<account>/campaigns/<campaign>/brief.json` for campaign-specific messaging
-- `<account>/campaigns/<campaign>/posts/<post>/...` for concrete slideshow assets
+- `<account>/campaigns/<campaign>/brief.json` for account-level campaign messaging
+- `<account>/tiktok/examples.md` for TikTok-specific hooks and examples
+- `<account>/tiktok/posts/<YYYY-MM-DD-slideshow-post>/...` for concrete slideshow assets
 - `<post>/images/` for generated and final slide images
 
 Do not wrap accounts in an extra `accounts/` folder when the repo only contains `defaults.json` plus account folders. Put account folders directly under the repo root.
@@ -112,7 +113,7 @@ Use `scripts/build-post-package.js` only if you want a lightweight manifest in-p
 - If the user asks for a slideshow/post/carousel, do not stop at scaffolding unless they explicitly asked for scaffolding only; draft actual prompts, overlay text, and captions.
 - Respect account voice/profile constraints when drafting. Avoid self-referential phrasing unless the user explicitly wants it.
 - Treat each post as a creative angle, not just another copy of the campaign message.
-- Before drafting a new post, check sibling posts in the same campaign and avoid reusing the same angle/copy family unless the user explicitly asks for a variant.
+- Before drafting a new post, check the most recent TikTok posts for the whole account and avoid reusing the same angle/copy family unless the user explicitly asks for a variant.
 - For image generation, prefer hero-frame + variations over six independent generations whenever subject consistency matters.
 - If the user asks for a slideshow but the account, campaign, or offer is ambiguous, stop and ask a short clarifying question before generating assets.
 - If there is exactly one obvious account/campaign context already established in the current working tree, reuse it and say so briefly.
@@ -130,31 +131,32 @@ Use `scripts/build-post-package.js` only if you want a lightweight manifest in-p
 Prefer a tree like:
 
 ```text
-content/tiktok-slideshows/
+content/
   defaults.json
   human-in-the-loop/
     profile.json
-    examples.md
     campaigns/
       campaign-name/
         brief.json
-        posts/
-          post-name/
-            prompts.json
-            texts.json
+    tiktok/
+      examples.md
+      posts/
+        2026-03-17-slideshow-busy-is-not-progress/
+          prompts.json
+          texts.json
+          caption.txt
+          post.json
+          images/
+            hero_frame.png
+            slide1_raw.png
+            slide1.png
+            ...
+          ready-to-publish/
+            slide1.png
+            ...
             caption.txt
-            post.json
-            images/
-              hero_frame.png
-              slide1_raw.png
-              slide1.png
-              ...
-            ready-to-publish/
-              slide1.png
-              ...
-              caption.txt
-              package-for-mobile.zip
-              package.json
+            package-for-mobile.zip
+            package.json
 ```
 
 Use this skill as the creation layer. Publishing, scheduling, and analytics should be separate adapters or later skills.
