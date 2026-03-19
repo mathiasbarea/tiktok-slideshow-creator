@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-const fs = require('fs');
 const path = require('path');
 const { slugify, ensureDir, writeJsonIfMissing, writeTextIfMissing, ensureAccount, ensureCampaign } = require('./_lib');
 
@@ -18,9 +17,10 @@ const offer = getArg('offer') || '';
 const cta = getArg('cta') || '';
 const message = getArg('message') || '';
 const angle = getArg('angle') || '';
+const templateFamily = getArg('template-family') || '';
 
 if (!accountId || !campaignId || !postTitle) {
-  console.error('Usage: node create-post.js --dir <content-root> --account <account-id> --campaign <campaign-id> --title <post-title> [--post <post-slug>] [--offer <offer-name>] [--cta <cta>] [--message <message>]');
+  console.error('Usage: node create-post.js --dir <content-root> --account <account-id> --campaign <campaign-id> --title <post-title> [--post <post-slug>] [--offer <offer-name>] [--cta <cta>] [--message <message>] [--angle <editorial-angle>] [--template-family <template-family>]');
   process.exit(1);
 }
 
@@ -79,6 +79,8 @@ if (writeJsonIfMissing(postConfigPath, {
   offer,
   cta,
   message,
+  angle,
+  templateFamily,
   profile: path.relative(postDir, account.profilePath).replace(/\\/g, '/'),
   brief: path.relative(postDir, campaign.briefPath).replace(/\\/g, '/')
 })) console.log(`Created ${postConfigPath}`);

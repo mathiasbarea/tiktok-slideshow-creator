@@ -39,7 +39,7 @@ Use this skill if you want to:
 
 - Node.js 18+
 - `npm`
-- An image provider key if using API-based generation:
+- An API key if using API-based generation or dynamic captions:
   - `OPENAI_API_KEY` for `openai`
   - `GEMINI_API_KEY` for `gemini`
 
@@ -61,7 +61,6 @@ content/tiktok-slideshows/
             prompts.json
             texts.json
             caption.txt
-            caption-short.txt
             post.json
             images/
             ready-to-publish/
@@ -143,6 +142,8 @@ Should look something like this:
 
 Use `local` when you want to place images manually instead of calling an image API.
 
+Use a single `caption.txt` artifact. It should already be short and optimized for TikTok.
+
 ----------
 
 ## ⚡ Quick start
@@ -215,6 +216,14 @@ node scripts/create-campaign.js --dir content/tiktok-slideshows --account my-bra
 node scripts/create-post.js --dir content/tiktok-slideshows --account my-brand --campaign launch-angle --title "First slideshow"
 ```
 
+### 4. Generate a post idea
+
+```bash
+node scripts/generate-post-idea.js --content-root content/tiktok-slideshow-creator --account my-brand --campaign launch-angle
+```
+
+This returns a structured idea for the next post, including a suggested angle, title, rationale, and slug, while trying to avoid repeating angles already used in sibling posts.
+
 ### 5. Draft the post copy
 
 ```
@@ -222,6 +231,8 @@ node scripts/draft-post.js --defaults content/tiktok-slideshows/defaults.json --
 ```
 
 This writes prompts, overlay text, and captions into the target post folder.
+
+`caption.txt` is now the only caption artifact and it is generated dynamically from the account profile, campaign brief, post metadata, and slide copy.
 
 ### 6. Generate images
 
@@ -246,8 +257,6 @@ This creates `ready-to-publish/` with:
 -   `slide1.png` to `slide6.png`
     
 -   `caption.txt`
-    
--   `caption-short.txt`
     
 -   `package.json`
     

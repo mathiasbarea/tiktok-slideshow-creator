@@ -28,6 +28,8 @@ Supported image providers currently include:
 - `openai` with models like `gpt-image-1`
 - `local` for manually supplied images
 
+Use a single `caption.txt` artifact. It should already be short and optimized for TikTok.
+
 ## Workflow
 
 ### 1. Initialize a content repo
@@ -56,7 +58,8 @@ This script should produce:
 - `prompts.json`
 - `texts.json`
 - `caption.txt`
-- `caption-short.txt`
+
+This script should generate `caption.txt` dynamically from the account profile, campaign brief, post metadata, slide texts, and recent sibling captions in the same campaign.
 
 Default caption style:
 - short and concise
@@ -86,7 +89,7 @@ Keep text horizontally centered. Control vertical placement with `profile.render
 
 ### 8. Export a ready-to-publish package
 
-Use `scripts/export-ready-package.js` to create a clean handoff folder containing only the final slide images, caption, short caption, package manifest, and a zip when possible.
+Use `scripts/export-ready-package.js` to create a clean handoff folder containing only the final slide images, caption, package manifest, and a zip when possible.
 
 Use `scripts/build-post-package.js` only if you want a lightweight manifest in-place. Prefer `export-ready-package.js` for a clean manual-upload handoff.
 
@@ -133,7 +136,6 @@ content/tiktok-slideshows/
             prompts.json
             texts.json
             caption.txt
-            caption-short.txt
             post.json
             images/
               hero_frame.png
@@ -144,7 +146,6 @@ content/tiktok-slideshows/
               slide1.png
               ...
               caption.txt
-              caption-short.txt
               package-for-mobile.zip
               package.json
 ```

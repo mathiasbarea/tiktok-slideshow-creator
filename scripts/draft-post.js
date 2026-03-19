@@ -17,6 +17,11 @@ function readJsonIfExists(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 }
 
+function readTextIfExists(filePath) {
+  if (!fs.existsSync(filePath)) return '';
+  return fs.readFileSync(filePath, 'utf-8');
+}
+
 function writeJson(filePath, value) {
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
 }
@@ -25,18 +30,77 @@ function pickLanguage(profile, defaults) {
   return profile.language || defaults.language || 'en';
 }
 
-function buildContext(profile, brief, angle) {
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function asSupportedTextProvider(value) {
+  const provider = String(value || '').trim().toLowerCase();
+  return provider === 'openai' || provider === 'gemini' ? provider : null;
+}
+
+function defaultTextModel(provider) {
+  if (provider === 'openai') return 'gpt-5-mini';
+  if (provider === 'gemini') return 'gemini-2.0-flash';
+  return '';
+}
+
+function hasApiKeyFor(provider) {
+  if (provider === 'openai') return Boolean(process.env.OPENAI_API_KEY);
+  if (provider === 'gemini') return Boolean(process.env.GEMINI_API_KEY);
+  return false;
+}
+
+function resolveTextGenConfig(defaults, profile) {
+  const defaultsTextGen = defaults.textGen || {};
+  const profileTextGen = profile.render?.textGen || {};
+  const defaultsImageGen = defaults.imageGen || {};
+  const profileImageGen = profile.render?.imageGen || {};
+
+  const provider = firstNonEmpty(
+    asSupportedTextProvider(profileTextGen.provider),
+    asSupportedTextProvider(defaultsTextGen.provider),
+    asSupportedTextProvider(profileImageGen.provider),
+    asSupportedTextProvider(defaultsImageGen.provider),
+    process.env.GEMINI_API_KEY ? 'gemini' : null,
+    process.env.OPENAI_API_KEY ? 'openai' : null
+  );
+
+  return {
+    provider,
+    model: firstNonEmpty(profileTextGen.model, defaultsTextGen.model) || defaultTextModel(provider)
+  };
+}
+
+function buildContext(profile, brief, post, angle) {
   const accountName = profile.displayName || profile.id || brief.accountId || 'the brand';
-  const offer = brief.coreOffer || (profile.offerings && profile.offerings[0] && profile.offerings[0].name) || 'the offer';
+  const offer = post.offer || brief.coreOffer || (profile.offerings && profile.offerings[0] && profile.offerings[0].name) || 'the offer';
   const audience = profile.audience || 'founders and operators';
   const topic = profile.topic || 'outcome-focused execution';
   const visualStyle = profile.visual?.style || 'realistic iPhone photo aesthetic';
   const subjectPattern = profile.visual?.subjectPattern || 'the same founder working in the same believable workspace from the same angle';
   const basePromptStyle = profile.visual?.basePromptStyle || 'realistic phone camera quality, same room identity across all slides, no text, no logos, no watermarks';
-  const cta = brief.cta || 'Learn more';
-  const title = brief.title || 'Untitled campaign';
-  const message = brief.message || `${accountName} positions ${offer} as a better alternative to slow process-heavy service models.`;
-  return { accountName, offer, audience, topic, visualStyle, subjectPattern, basePromptStyle, cta, title, message, angle };
+  const cta = post.cta || brief.cta || 'Learn more';
+  const campaignTitle = brief.title || 'Untitled campaign';
+  const postTitle = post.postTitle || post.title || campaignTitle;
+  const message = post.message || brief.message || `${accountName} positions ${offer} as a better alternative to slow process-heavy service models.`;
+  return {
+    accountName,
+    offer,
+    audience,
+    topic,
+    visualStyle,
+    subjectPattern,
+    basePromptStyle,
+    cta,
+    campaignTitle,
+    postTitle,
+    message,
+    angle
+  };
 }
 
 function getAngleLibrary(ctx) {
@@ -50,7 +114,6 @@ function getAngleLibrary(ctx) {
         'Less friction.\nMore movement.\nMore momentum.',
         `${ctx.offer}.\nBuilt for teams that\nneed momentum.`
       ],
-      caption: `Some service models are built around process. Kickoff calls, strategy decks, alignment loops, status updates. That can work in some contexts.\n\nBut if what you need is movement, it can start to feel heavier than it should.\n\nThat is the gap ${ctx.offer} is trying to close. Less overhead. Less meeting gravity. More shipped work. More visible momentum.\n\nThat is the idea behind ${ctx.accountName}. Not more process for the sake of process. More progress.\n\n#startup #founders #agency #productizedservice #buildinpublic`,
       promptSlides: [
         'The founder looks tired and unconvinced while reviewing process-heavy proposals, too many tabs open, believable frustration, startup operator energy.',
         'The same founder is on a meeting-heavy video call with too many people and too much coordination, visible fatigue, low momentum, same room and same camera angle.',
@@ -69,7 +132,6 @@ function getAngleLibrary(ctx) {
         'Less coordination\ndrag. More visible\nmovement.',
         `${ctx.offer}.\nFor teams tired of\nmeeting gravity.`
       ],
-      caption: `A lot of teams are not blocked by talent. They are blocked by coordination overhead. Another check-in. Another update. Another round of alignment.\n\nThat is why meeting-heavy workflows start to feel expensive fast. Not just in money, in momentum.\n\n${ctx.offer} is built around a simpler idea: less meeting gravity, more visible movement.\n\nThat is the direction behind ${ctx.accountName}.\n\n#startup #founders #agency #operations #buildinpublic`,
       promptSlides: [
         'The founder looks drained after back-to-back calls, laptop full of calendar blocks, realistic meeting fatigue.',
         'The same founder sits through another update call with little real movement, same room and same angle, visible boredom and frustration.',
@@ -88,7 +150,6 @@ function getAngleLibrary(ctx) {
         'Less retainer\nweight. More visible\nprogress.',
         `${ctx.offer}.\nFor teams that want\ntraction, not drag.`
       ],
-      caption: `The hardest part is not always paying for a service. It is paying while momentum still feels light.\n\nThat is where retainer-heavy models can start to feel frustrating: money goes out, but movement does not always show up fast enough.\n\n${ctx.offer} is built around a different expectation — visible traction, not just ongoing activity.\n\nThat is a big part of how ${ctx.accountName} thinks about execution.\n\n#startup #founders #retainer #agency #productizedservice`,
       promptSlides: [
         'The founder looks skeptical while reviewing invoices and deliverables, the emotional tone is weight without payoff.',
         'The same founder sees money leaving but very little visible progress, same room and same camera angle.',
@@ -107,7 +168,6 @@ function getAngleLibrary(ctx) {
         'Less delay.\nMore clarity.\nMore movement.',
         `${ctx.offer}.\nBuilt for teams that\nneed momentum.`
       ],
-      caption: `Founders rarely wake up wanting more process. They usually want movement, clarity, and something real shipping forward.\n\nThat is why overhead becomes such a problem when speed matters. You feel it quickly.\n\n${ctx.offer} is built around that founder reality: less delay, more visible momentum.\n\nThat is one of the core ideas behind ${ctx.accountName}.\n\n#startup #founders #execution #productizedservice #buildinpublic`,
       promptSlides: [
         'The founder looks impatient and restless, surrounded by signs of delay and overhead.',
         'The same founder feels blocked by a slow-moving workflow with too much coordination and not enough shipping.',
@@ -126,7 +186,6 @@ function getAngleLibrary(ctx) {
         'Less noise.\nMore signal.\nMore movement.',
         `${ctx.offer}.\nBuilt around outcomes,\nnot optics.`
       ],
-      caption: `Busy is easy to perform. Outcomes are harder to fake.\n\nThat is the difference a lot of teams eventually run into: a calendar can look full while progress still feels thin.\n\n${ctx.offer} is built around the opposite standard — outcomes first, not activity optics.\n\nThat framing is central to how ${ctx.accountName} thinks about execution.\n\n#startup #founders #outcomes #agency #execution`,
       promptSlides: [
         'The founder looks unconvinced by a busy-looking workflow that lacks visible payoff.',
         'The same founder sees lots of activity but little meaningful movement, same room and angle.',
@@ -170,11 +229,39 @@ function collectUsedAngles(postDir) {
   return used;
 }
 
-function chooseAngle(post, postDir, ctx) {
-  if (post.angle) return post.angle;
+function collectSiblingCaptions(postDir) {
+  const campaignDir = path.resolve(postDir, '..', '..');
+  const postsDir = path.join(campaignDir, 'posts');
+  if (!fs.existsSync(postsDir)) return [];
+
+  const refs = [];
+  const entries = fs.readdirSync(postsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  for (const entry of entries) {
+    const candidateDir = path.join(postsDir, entry.name);
+    if (path.resolve(candidateDir) === path.resolve(postDir)) continue;
+    const caption = normalizeCaptionOutput(readTextIfExists(path.join(candidateDir, 'caption.txt')));
+    if (!caption) continue;
+    const meta = readJsonIfExists(path.join(candidateDir, 'post.json')) || {};
+    refs.push({
+      postSlug: entry.name,
+      postTitle: meta.postTitle || entry.name,
+      angle: meta.angle || null,
+      caption: truncateText(caption, 320)
+    });
+  }
+
+  return refs.slice(-5);
+}
+
+function chooseTemplateFamily(post, postDir, ctx) {
   const library = getAngleLibrary(ctx);
+  if (post.templateFamily && library[post.templateFamily]) return post.templateFamily;
+  if (post.angle && library[post.angle]) return post.angle;
   const used = collectUsedAngles(postDir);
-  const available = Object.keys(library).filter(angle => !used.has(angle));
+  const available = Object.keys(library).filter((angle) => !used.has(angle));
   return available[0] || Object.keys(library)[0];
 }
 
@@ -185,28 +272,216 @@ function generatePrompts(ctx, language, promptSlides) {
   };
 }
 
-function normalizeWhitespace(value) {
-  return String(value || '').replace(/\s+/g, ' ').trim();
+function truncateText(value, maxChars) {
+  const clean = String(value || '').trim();
+  if (!clean || clean.length <= maxChars) return clean;
+  return `${clean.slice(0, maxChars - 3).trimEnd()}...`;
 }
 
-function shortenOffer(offer, fallback) {
-  const clean = normalizeWhitespace(offer || fallback || 'the offer');
-  return clean.length > 72 ? fallback || 'the offer' : clean;
+function normalizeCaptionOutput(value) {
+  let text = String(value || '').replace(/\r\n/g, '\n').trim();
+  if (!text) return '';
+
+  text = text.replace(/^```(?:text)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  text = text.replace(/^caption\s*:\s*/i, '').trim();
+
+  if ((text.startsWith('"') && text.endsWith('"'))) {
+    text = text.slice(1, -1).trim();
+  }
+
+  return text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-function buildShortCaption(ctx, angle) {
-  const offer = shortenOffer(ctx.offer, 'this model');
-  const cta = 'Check link in bio for more.';
+function buildCaptionInstructions(language) {
+  return [
+    'You write short, native-sounding TikTok slideshow captions.',
+    `Write in ${language}.`,
+    'Return plain text only.',
+    'Make the caption feel custom to the supplied post, not like a generic template.',
+    'Use 2 or 3 short paragraphs max.',
+    'The flow should be: hook, value/progression, CTA when relevant.',
+    'Use at most 5 hashtags on the final line.',
+    'Do not use emojis, bullets, labels, quotation marks, or self-referential phrases.',
+    'Avoid repeating openings, CTA wording, or hashtag clusters from sibling captions.'
+  ].join(' ');
+}
 
-  const map = {
-    'process-overload': `Too much process. Not enough progress.\n\n${offer} helps teams move faster with less overhead.\n\n${cta}\n\n#startup #founders #agency #ai #operations`,
-    'meeting-fatigue': `Too many updates. Not enough movement.\n\n${offer} is built to reduce meeting gravity and help work actually ship.\n\n${cta}\n\n#startup #founders #agency #operations #ai`,
-    'retainer-drag': `Still paying, still waiting, still stuck.\n\n${offer} is built for visible traction, not retainer drag.\n\n${cta}\n\n#startup #founders #agency #growth #ai`,
-    'founders-need-movement': `Founders need movement, not more process.\n\n${offer} is built for teams that need momentum.\n\n${cta}\n\n#startup #founders #buildinpublic #execution #ai`,
-    'outcomes-not-activity': `Busy does not equal progress.\n\n${offer} is built around outcomes, not activity theater.\n\n${cta}\n\n#startup #founders #operations #agency #ai`
+function buildCaptionPrompt(ctx, profile, brief, post, slideTexts, examples, siblingCaptions) {
+  const payload = {
+    account: {
+      name: ctx.accountName,
+      audience: ctx.audience,
+      topic: ctx.topic,
+      offer: ctx.offer
+    },
+    campaign: {
+      title: ctx.campaignTitle,
+      message: ctx.message,
+      cta: ctx.cta
+    },
+    post: {
+      title: ctx.postTitle,
+      angle: ctx.angle,
+      slideTexts
+    },
+    voice: {
+      tone: profile.voice?.tone || '',
+      style: profile.voice?.style || '',
+      captionStyle: profile.voice?.captionStyle || '',
+      avoid: profile.voice?.avoid || []
+    },
+    briefNotes: Array.isArray(brief.notes) ? brief.notes : [],
+    siblingCaptionReferences: siblingCaptions,
+    examples: examples ? truncateText(examples, 1800) : ''
   };
 
-  return map[angle] || `Less noise. More movement.\n\n${offer} helps teams move from activity to outcomes.\n\n${cta}\n\n#startup #founders #ai #operations`;
+  return [
+    'Create one short TikTok caption for this slideshow package.',
+    'Keep it compact and readable on mobile.',
+    'Mention the offer naturally only when it helps the story.',
+    'Use the CTA naturally if it fits; do not force it.',
+    'JSON context:',
+    JSON.stringify(payload, null, 2)
+  ].join('\n\n');
+}
+
+function extractOpenAIText(data) {
+  if (typeof data.output_text === 'string' && data.output_text.trim()) {
+    return data.output_text.trim();
+  }
+
+  const output = Array.isArray(data.output) ? data.output : [];
+  const content = [];
+
+  for (const item of output) {
+    if (!Array.isArray(item.content)) continue;
+    for (const part of item.content) {
+      if (part.type === 'output_text' && part.text) content.push(part.text);
+    }
+  }
+
+  return content.join('').trim();
+}
+
+function extractGeminiText(data) {
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  return parts.map((part) => part.text || '').join('').trim();
+}
+
+async function generateCaptionWithOpenAI(model, instructions, prompt) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('Missing OPENAI_API_KEY for dynamic caption generation.');
+  }
+
+  const res = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model,
+      input: [
+        {
+          role: 'developer',
+          content: [{ type: 'input_text', text: instructions }]
+        },
+        {
+          role: 'user',
+          content: [{ type: 'input_text', text: prompt }]
+        }
+      ]
+    })
+  });
+
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error(data.error?.message || `OpenAI caption generation failed with status ${res.status}`);
+  }
+
+  const text = normalizeCaptionOutput(extractOpenAIText(data));
+  if (!text) throw new Error('OpenAI did not return caption text.');
+  return text;
+}
+
+async function generateCaptionWithGemini(model, instructions, prompt) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('Missing GEMINI_API_KEY for dynamic caption generation.');
+  }
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: instructions }]
+      },
+      contents: [{
+        role: 'user',
+        parts: [{ text: prompt }]
+      }],
+      generationConfig: {
+        temperature: 0.8,
+        maxOutputTokens: 220
+      }
+    })
+  });
+
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error(data.error?.message || `Gemini caption generation failed with status ${res.status}`);
+  }
+
+  const text = normalizeCaptionOutput(extractGeminiText(data));
+  if (!text) throw new Error('Gemini did not return caption text.');
+  return text;
+}
+
+async function generateDynamicCaption(defaults, profile, profilePathForExamples, brief, post, postDir, ctx, slideTexts) {
+  const configured = resolveTextGenConfig(defaults, profile);
+  let config = configured;
+
+  if (!hasApiKeyFor(config.provider)) {
+    const fallbackProvider = ['gemini', 'openai'].find((provider) => provider !== config.provider && hasApiKeyFor(provider));
+    if (fallbackProvider) {
+      config = {
+        provider: fallbackProvider,
+        model: defaultTextModel(fallbackProvider)
+      };
+    }
+  }
+
+  if (!config.provider || !config.model) {
+    throw new Error('Dynamic captions require a supported text provider. Configure defaults.textGen/provider or profile.render.textGen/provider, or set OPENAI_API_KEY or GEMINI_API_KEY.');
+  }
+
+  const examplesPath = path.join(path.dirname(profilePathForExamples), 'examples.md');
+  const examples = readTextIfExists(examplesPath);
+  const siblingCaptions = collectSiblingCaptions(postDir);
+  const instructions = buildCaptionInstructions(pickLanguage(profile, defaults));
+  const prompt = buildCaptionPrompt(ctx, profile, brief, post, slideTexts, examples, siblingCaptions);
+
+  if (config.provider === 'openai') {
+    return {
+      caption: await generateCaptionWithOpenAI(config.model, instructions, prompt),
+      provider: config.provider,
+      model: config.model
+    };
+  }
+
+  if (config.provider === 'gemini') {
+    return {
+      caption: await generateCaptionWithGemini(config.model, instructions, prompt),
+      provider: config.provider,
+      model: config.model
+    };
+  }
+
+  throw new Error(`Unsupported text provider for captions: ${config.provider}`);
 }
 
 const defaultsPath = getArg('defaults');
@@ -219,38 +494,52 @@ if (!defaultsPath || !profilePath || !briefPath || !postDir) {
   process.exit(1);
 }
 
-const defaults = readJson(defaultsPath);
-const profile = readJson(profilePath);
-const brief = readJson(briefPath);
-const postConfigPath = path.join(postDir, 'post.json');
-const post = readJsonIfExists(postConfigPath) || {};
-const language = pickLanguage(profile, defaults);
-const preliminaryCtx = buildContext(profile, brief, null);
-const angle = chooseAngle(post, postDir, preliminaryCtx);
-const ctx = buildContext(profile, brief, angle);
-const library = getAngleLibrary(ctx);
-const variant = library[angle];
+async function main() {
+  const defaults = readJson(defaultsPath);
+  const profile = readJson(profilePath);
+  const brief = readJson(briefPath);
+  const postConfigPath = path.join(postDir, 'post.json');
+  const post = readJsonIfExists(postConfigPath) || {};
+  const language = pickLanguage(profile, defaults);
+  const preliminaryCtx = buildContext(profile, brief, post, null);
+  const templateFamily = chooseTemplateFamily(post, postDir, preliminaryCtx);
+  const editorialAngle = firstNonEmpty(post.angle, templateFamily);
+  const ctx = buildContext(profile, brief, post, editorialAngle);
+  const library = getAngleLibrary(ctx);
+  const variant = library[templateFamily];
 
-if (!variant) {
-  console.error(`No creative angle config found for angle: ${angle}`);
-  process.exit(1);
+  if (!variant) {
+    console.error(`No creative template family config found for templateFamily: ${templateFamily}`);
+    process.exit(1);
+  }
+
+  const promptsPath = path.join(postDir, 'prompts.json');
+  const textsPath = path.join(postDir, 'texts.json');
+  const captionPath = path.join(postDir, 'caption.txt');
+
+  writeJson(promptsPath, generatePrompts(ctx, language, variant.promptSlides));
+  writeJson(textsPath, variant.texts);
+
+  const captionResult = await generateDynamicCaption(defaults, profile, profilePath, brief, post, postDir, ctx, variant.texts);
+  fs.writeFileSync(captionPath, `${captionResult.caption}\n`);
+
+  post.status = 'drafted';
+  post.language = language;
+  post.accountName = ctx.accountName;
+  post.offer = post.offer || ctx.offer;
+  post.cta = post.cta || ctx.cta;
+  post.message = post.message || ctx.message;
+  post.angle = editorialAngle;
+  post.templateFamily = templateFamily;
+  post.captionProvider = captionResult.provider;
+  post.captionModel = captionResult.model;
+  post.captionDynamic = true;
+  writeJson(postConfigPath, post);
+
+  console.log(`Drafted post content in ${postDir} using angle=${editorialAngle}, templateFamily=${templateFamily}, and caption=${captionResult.provider}/${captionResult.model}`);
 }
 
-const promptsPath = path.join(postDir, 'prompts.json');
-const textsPath = path.join(postDir, 'texts.json');
-const captionPath = path.join(postDir, 'caption.txt');
-const shortCaptionPath = path.join(postDir, 'caption-short.txt');
-
-writeJson(promptsPath, generatePrompts(ctx, language, variant.promptSlides));
-writeJson(textsPath, variant.texts);
-fs.writeFileSync(captionPath, variant.caption + '\n');
-fs.writeFileSync(shortCaptionPath, buildShortCaption(ctx, angle) + '\n');
-
-post.status = 'drafted';
-post.language = language;
-post.accountName = ctx.accountName;
-post.offer = post.offer || ctx.offer;
-post.angle = angle;
-writeJson(postConfigPath, post);
-
-console.log(`Drafted post content in ${postDir} using angle=${angle}`);
+main().catch((err) => {
+  console.error(err.message || String(err));
+  process.exit(1);
+});
