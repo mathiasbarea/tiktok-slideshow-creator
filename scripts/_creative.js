@@ -467,10 +467,14 @@ function buildIdeaTaskPayload({ contentRoot, account, campaign }) {
   const prompt = [
     'Create one fresh TikTok slideshow post idea for this account and campaign.',
     'Return JSON only.',
+    'Return exactly one JSON object with only these keys: postTitle, postSlug, angle, templateFamily, rationale.',
+    'Do not include hook, caption, slides, prompts, texts, imagePrompt, or any other keys.',
+    'This step is idea selection only. Do not draft the slideshow package yet.',
     'Do not repeat recent post angles, hook openings, caption openings, or copy families across the recent account-level TikTok post set.',
     'Do not reuse a recent post title, slug family, or the same title opening.',
     'Keep the post title short and punchy.',
     'Use templateFamily as the nearest drafting/rendering family, but keep angle as a fresh editorial label.',
+    'rationale must be a short plain-language reason this idea is fresh and strategically relevant for the account.',
     'postSlug must be kebab-case and should normalize to the pattern YYYY-MM-DD-slideshow-your-post-name.',
   ].join(' ');
 

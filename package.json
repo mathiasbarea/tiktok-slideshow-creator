@@ -4,7 +4,7 @@
   "description": "Create 6-slide TikTok slideshow packages with drafting, image generation, text overlays, and manual export tooling.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"No automated tests yet\""
+    "test": "node --test tests/*.test.js"
   },
   "keywords": ["tiktok", "slideshow", "openclaw", "skill", "content"],
   "author": "",
