@@ -270,7 +270,7 @@ async function generateGemini(runtime, prompt, outPath) {
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        responseModalities: ['TEXT', 'IMAGE'],
+        responseModalities: ['IMAGE'],
         imageConfig: {
           aspectRatio: runtime.geminiAspectRatio,
           imageSize: runtime.geminiImageSize,
@@ -299,7 +299,7 @@ async function editGemini(runtime, referencePath, prompt, outPath) {
         ],
       }],
       generationConfig: {
-        responseModalities: ['TEXT', 'IMAGE'],
+        responseModalities: ['IMAGE'],
         imageConfig: {
           aspectRatio: runtime.geminiAspectRatio,
           imageSize: runtime.geminiImageSize,
