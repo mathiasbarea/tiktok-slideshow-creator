@@ -16,9 +16,10 @@ try {
   const offer = getArg('offer') || '';
   const cta = getArg('cta') || '';
   const message = getArg('message') || '';
+  const visualTemplateId = slugify(getArg('visual-template'));
 
   if (!accountId || !campaignId) {
-    console.error('Usage: node create-campaign.js [--dir <content-root>] --account <account-id> --campaign <campaign-id> [--title <title>] [--offer <offer-name>] [--cta <cta>] [--message <message>]');
+    console.error('Usage: node create-campaign.js [--dir <content-root>] --account <account-id> --campaign <campaign-id> [--title <title>] [--offer <offer-name>] [--cta <cta>] [--message <message>] [--visual-template <template-id>]');
     process.exit(1);
   }
 
@@ -28,6 +29,7 @@ try {
     coreOffer: offer,
     cta,
     message,
+    visualTemplateId,
     notes: []
   });
 

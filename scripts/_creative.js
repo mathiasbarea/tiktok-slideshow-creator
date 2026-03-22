@@ -1,6 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 const { slugify } = require('./_lib');
+const {
+  buildTemplateTextSchema,
+  flattenTextEntry,
+  loadTemplateForSelection,
+  normalizeTemplateTextEntries,
+  summarizeTemplateForPrompt,
+} = require('./_templates');
 
 const DEFAULT_SLIDE_COUNT = 6;
 const DEFAULT_CAPTION_MAX_CHARS = 500;
@@ -140,7 +147,7 @@ function normalizePostSlug(value, datePrefix) {
 function buildOverlayFingerprint(values) {
   if (!Array.isArray(values)) return '';
   return values
-    .map((value) => normalizeComparableText(value))
+    .map((value) => normalizeComparableText(flattenTextEntry(value)))
     .filter(Boolean)
     .slice(0, 3)
     .join(' | ');
@@ -194,7 +201,7 @@ function getSlideCount(defaults, profile) {
 function summarizeOverlayTexts(texts, limit = 3) {
   if (!Array.isArray(texts)) return [];
   return texts
-    .map((value) => normalizeText(value).replace(/\s+/g, ' '))
+    .map((value) => normalizeText(flattenTextEntry(value)).replace(/\s+/g, ' '))
     .filter(Boolean)
     .slice(0, limit);
 }
@@ -205,6 +212,12 @@ function extractCaptionOpening(caption) {
   const firstParagraph = clean.split(/\n\n+/)[0] || clean;
   const firstSentence = firstParagraph.split(/(?<=[.!?])\s+/)[0] || firstParagraph;
   return truncateText(firstSentence, 140);
+}
+
+function hasMeaningfulTextEntry(value) {
+  if (typeof value === 'string') return Boolean(normalizeText(value));
+  if (!value || typeof value !== 'object') return false;
+  return Boolean(flattenTextEntry(value));
 }
 
 function summarizePost(postDir, entry) {
@@ -297,6 +310,7 @@ function summarizeBrief(brief) {
     goal: brief.goal || '',
     message: brief.message || '',
     cta: brief.cta || '',
+    visualTemplateId: brief.visualTemplateId || '',
     notes: Array.isArray(brief.notes) ? brief.notes : [],
   };
 }
@@ -359,6 +373,7 @@ function buildContext(defaults, profile, brief, post = {}) {
   const postTitle = firstNonEmpty(post.postTitle, post.title, campaignTitle);
   const angle = firstNonEmpty(post.angle, post.templateFamily, '');
   const templateFamily = firstNonEmpty(post.templateFamily, '');
+  const visualTemplateId = firstNonEmpty(post.visualTemplateId, brief.visualTemplateId, '');
   const message = firstNonEmpty(
     post.message,
     brief.message,
@@ -379,6 +394,7 @@ function buildContext(defaults, profile, brief, post = {}) {
     postTitle,
     angle,
     templateFamily,
+    visualTemplateId,
     message,
   };
 }
@@ -401,7 +417,8 @@ function buildIdeaSchema() {
   };
 }
 
-function buildDraftSchema(slideCount) {
+function buildDraftSchema(slideCount, templateManifest = null) {
+  const templateTextSchema = buildTemplateTextSchema(templateManifest);
   return {
     type: 'object',
     properties: {
@@ -430,7 +447,9 @@ function buildDraftSchema(slideCount) {
         type: 'array',
         minItems: slideCount,
         maxItems: slideCount,
-        items: { type: 'string' },
+        ...(templateTextSchema
+          ? { prefixItems: templateTextSchema, items: false }
+          : { items: { type: 'string' } }),
       },
       caption: { type: 'string' },
     },
@@ -491,11 +510,15 @@ function buildDraftTaskPayload({ defaultsPath, profilePath, briefPath, postDir }
   const profile = readJson(profilePath);
   const brief = readJson(briefPath);
   const post = readJsonIfExists(path.join(postDir, 'post.json'), {}) || {};
-  const slideCount = getSlideCount(defaults, profile);
   const examplesPath = path.resolve(postDir, '..', '..', 'examples.md');
   const postsDir = path.resolve(postDir, '..');
   const context = buildContext(defaults, profile, brief, post);
   const recentPosts = collectRecentPosts(postsDir, { excludePostDir: postDir, limit: DEFAULT_RECENT_POST_LIMIT });
+  const templateManifest = loadTemplateForSelection(post.visualTemplateId, brief.visualTemplateId, {
+    postDir,
+    briefPath,
+  });
+  const slideCount = templateManifest?.slides?.length || getSlideCount(defaults, profile);
 
   const input = {
     context,
@@ -508,18 +531,21 @@ function buildDraftTaskPayload({ defaultsPath, profilePath, briefPath, postDir }
       offer: post.offer || '',
       cta: post.cta || '',
       message: post.message || '',
+      visualTemplateId: post.visualTemplateId || brief.visualTemplateId || '',
     },
     profile: summarizeProfile(profile),
     brief: summarizeBrief(brief),
     recentPosts,
     repetitionSignals: buildRepetitionSignals(recentPosts),
     examples: truncateText(readTextIfExists(examplesPath, ''), 2000),
+    visualTemplate: summarizeTemplateForPrompt(templateManifest),
     guidance: buildCreativeReferences(),
     constraints: {
       slideCount,
       captionMaxChars: DEFAULT_CAPTION_MAX_CHARS,
       overlayLineTarget: '2 to 4 lines',
       overlayWordTarget: '4 to 6 words per line',
+      textMode: templateManifest ? 'template-slots' : 'overlay-strings',
     },
   };
 
@@ -532,13 +558,16 @@ function buildDraftTaskPayload({ defaultsPath, profilePath, briefPath, postDir }
     'prompts.base must lock scene identity and prompts.slides must show believable progression across the same person and workspace.',
     `caption must stay under ${DEFAULT_CAPTION_MAX_CHARS} characters, be plain text only, and already be optimized for TikTok.`,
     'Use templateFamily as loose creative guidance, not as a reason to repeat old copy.',
+    templateManifest
+      ? 'Use the selected visual template. texts must be an array of objects whose keys exactly match each slide editableSlotNames list. For static slides with no editable slots, return an empty object.'
+      : '',
   ].join(' ');
 
   return {
     kind: 'draft-task',
     prompt,
     input,
-    schema: buildDraftSchema(slideCount),
+    schema: buildDraftSchema(slideCount, templateManifest),
   };
 }
 
@@ -636,7 +665,7 @@ function validateFreshDraft({ postTitle, postSlug, angle, templateFamily, texts,
   });
 
   const issues = [];
-  const hookOpening = texts[0] || '';
+  const hookOpening = flattenTextEntry(texts[0]);
   const overlayFingerprint = buildOverlayFingerprint(texts);
   const captionOpening = extractCaptionOpening(caption);
   const normalizedCaption = normalizeComparableText(caption);
@@ -694,7 +723,15 @@ function normalizeDraftOutput(raw, { slideCount, fallbackPost, recentPosts = [] 
   const prompts = draft?.prompts || {};
   const basePrompt = normalizeText(prompts.base);
   const promptSlides = Array.isArray(prompts.slides) ? prompts.slides.map((value) => normalizeText(value)) : [];
-  const texts = Array.isArray(draft?.texts) ? draft.texts.map((value) => normalizeText(value)) : [];
+  const templateManifest = loadTemplateForSelection(fallbackPost.visualTemplateId, {
+    postDir: fallbackPost.postDir,
+    briefPath: fallbackPost.briefPath,
+    contentRoot: fallbackPost.contentRoot,
+    accountId: fallbackPost.accountId,
+  });
+  const texts = templateManifest
+    ? normalizeTemplateTextEntries(draft?.texts, templateManifest)
+    : Array.isArray(draft?.texts) ? draft.texts.map((value) => normalizeText(value)) : [];
   const caption = normalizeCaption(draft?.caption);
   const templateFamily = firstNonEmpty(normalizeText(draft?.templateFamily), fallbackPost.templateFamily);
   const angle = firstNonEmpty(normalizeText(draft?.angle), fallbackPost.angle, templateFamily);
@@ -705,7 +742,11 @@ function normalizeDraftOutput(raw, { slideCount, fallbackPost, recentPosts = [] 
   if (promptSlides.length !== slideCount || promptSlides.some((value) => !value)) {
     throw new Error(`Draft JSON must include exactly ${slideCount} non-empty prompts.slides entries.`);
   }
-  if (texts.length !== slideCount || texts.some((value) => !value)) {
+  const hasInvalidTexts = templateManifest
+    ? texts.some((value) => !hasMeaningfulTextEntry(value) && Object.keys(value || {}).length !== 0)
+    : texts.some((value) => !normalizeText(value));
+
+  if (texts.length !== slideCount || hasInvalidTexts) {
     throw new Error(`Draft JSON must include exactly ${slideCount} non-empty texts entries.`);
   }
   if (!caption) throw new Error('Draft JSON must include a non-empty caption.');
@@ -769,6 +810,7 @@ function applyDraftPackage({ defaults, profile, brief, postDir, draft }) {
   post.postTitle = draft.postTitle;
   post.angle = draft.angle;
   post.templateFamily = draft.templateFamily;
+  post.visualTemplateId = post.visualTemplateId || brief.visualTemplateId || '';
   post.ideaRationale = draft.rationale || post.ideaRationale || '';
   post.creativeSource = 'agent';
   delete post.captionProvider;

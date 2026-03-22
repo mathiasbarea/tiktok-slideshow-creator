@@ -6,7 +6,7 @@ This skill is now agent-first for creative generation:
 
 - the agent generates post ideas, prompts, overlay text, and `caption.txt`
 - the scripts build task payloads, validate freshness, and apply the generated JSON
-- API keys are only needed for image generation
+- API keys are only needed for image generation when the selected visual template actually depends on a provider call
 
 The skill does not handle publishing, scheduling, or analytics.
 
@@ -35,6 +35,11 @@ The scaffolding and idea scripts derive that root automatically when the skill i
   defaults.json
   <account>/
     profile.json
+    templates/
+      <visualTemplateId>/
+        manifest.json
+        slides/
+        examples/
     campaigns/
       <campaign>/
         brief.json
@@ -51,6 +56,31 @@ The scaffolding and idea scripts derive that root automatically when the skill i
 ```
 
 `defaults.json` is for shared technical defaults. Keep account identity in `profile.json`, campaign messaging in account-level `campaigns/<campaign>/brief.json`, and concrete TikTok assets in `tiktok/posts/<post>/`.
+
+## Visual templates
+
+Campaigns can now choose a visual template independently from the editorial `templateFamily`.
+
+- `templateFamily` stays editorial and drives freshness/copy guidance.
+- `visualTemplateId` selects the concrete slide layout/composition pack.
+- Put `visualTemplateId` in `campaigns/<campaign>/brief.json` when a campaign should use a specific pack.
+- New posts inherit the campaign template into `post.json`, but posts can still override it if needed.
+- Store real packs under `<content-root>/<account>/templates/<visualTemplateId>/`.
+- Shared reusable packs can also live under `<content-root>/_shared/templates/<visualTemplateId>/`.
+
+Current example visual template:
+
+- `openclaw-multi-agent`
+
+Template packs are manifest-driven. They can define:
+
+- slot-based local slides rendered from static PNG assets
+- static final slides that should be copied as-is, such as a fixed CTA close
+- future mixed packs that combine local assets with provider-generated imagery
+
+When a post uses a template pack, `texts.json` becomes an array of per-slide objects keyed by slot name instead of a plain string array.
+
+For the full pack layout and `manifest.json` contract, see `references/visual-templates.md`.
 
 ## Supported image providers
 
@@ -94,7 +124,7 @@ node scripts/init-project.js
 
 ```bash
 node scripts/create-account.js --account my-brand
-node scripts/create-campaign.js --account my-brand --campaign launch-angle
+node scripts/create-campaign.js --account my-brand --campaign launch-angle --visual-template openclaw-multi-agent
 ```
 
 ### 3. Create a post scaffold
@@ -103,7 +133,7 @@ node scripts/create-campaign.js --account my-brand --campaign launch-angle
 node scripts/create-post.js --account my-brand --campaign launch-angle --title "First slideshow"
 ```
 
-`post.json` stores the editorial `angle`, the technical `templateFamily`, the `campaignId`, and platform metadata. New posts default to a folder name like `YYYY-MM-DD-slideshow-first-slideshow`. `caption.txt` is the only caption artifact and should already be short enough for TikTok.
+`post.json` stores the editorial `angle`, the technical `templateFamily`, the campaign linkage, platform metadata, and optionally `visualTemplateId`. New posts default to a folder name like `YYYY-MM-DD-slideshow-first-slideshow`. `caption.txt` is the only caption artifact and should already be short enough for TikTok.
 
 ### 4. Build an idea task for the agent
 
@@ -144,6 +174,8 @@ Without extra input, this returns a JSON task payload for the agent or workflow 
 - `texts.json`
 - `caption.txt`
 
+If a visual template pack is active, the draft task also includes the slot contract for each slide. In that mode, `texts` must be an array of objects matching the editable slot names for each slide. Static slides should return `{}`.
+
 The draft JSON accepted by the skill resolves to:
 
 - `postTitle`
@@ -167,11 +199,17 @@ node scripts/generate-images.js --defaults <content-root>/defaults.json --profil
 
 The script writes into `<post-dir>/images/`. It prefers `hero_frame.png` plus variations for consistency and also records generation logs for retries and diagnostics.
 
+If the post uses a local `template-pack`, this step can render `slideN_raw.png` directly from template assets under the content repo without calling Gemini or OpenAI.
+
 ### 7. Add overlays
 
 ```bash
 node scripts/add-text-overlay.js --input <post-dir> --texts <post-dir>/texts.json --profile <content-root>/my-brand/profile.json
 ```
+
+For classic slideshow posts, this applies centered overlay text over the raw slides.
+
+For template-pack posts, this composes each slide from the manifest-defined slots and the per-slide `texts.json` objects.
 
 ### 8. Export the ready package
 
@@ -234,4 +272,5 @@ When the skill is running from `.openclaw/skills`, it rejects alternate roots in
 - `references/slide-structure.md`
 - `references/prompting.md`
 - `references/text-overlay.md`
+- `references/visual-templates.md`
 - `references/account-profiles.md`

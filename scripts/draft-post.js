@@ -61,7 +61,10 @@ async function main() {
       postSlug: task.input.post.postSlug,
       angle: task.input.post.angle,
       templateFamily: task.input.post.templateFamily,
+      visualTemplateId: task.input.post.visualTemplateId,
       rationale: task.input.post.rationale,
+      postDir,
+      briefPath,
     },
     recentPosts: task.input.recentPosts,
   });

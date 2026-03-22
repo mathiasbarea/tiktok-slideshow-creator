@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const fs = require('fs');
 const path = require('path');
+const { drawTextInSlot, normalizeText, registerWindowsFallbackFonts, wrapText } = require('./_render-text');
+const { flattenTextEntry, loadTemplateForSelection } = require('./_templates');
 
 const args = process.argv.slice(2);
 function getArg(name) {
@@ -19,34 +21,28 @@ if (!postDir || !textsPath) {
   process.exit(1);
 }
 
-const texts = JSON.parse(fs.readFileSync(textsPath, 'utf-8'));
-if (texts.length !== 6) {
-  console.error('texts.json must have exactly 6 entries');
-  process.exit(1);
-}
-
 const profile = profilePath && fs.existsSync(profilePath)
   ? JSON.parse(fs.readFileSync(profilePath, 'utf-8'))
   : {};
-
-function registerWindowsFallbackFonts() {
-  const fontCandidates = [
-    { path: 'C:/Windows/Fonts/arial.ttf', family: 'Arial' },
-    { path: 'C:/Windows/Fonts/arialbd.ttf', family: 'Arial Bold' },
-    { path: 'C:/Windows/Fonts/segoeui.ttf', family: 'Segoe UI' },
-    { path: 'C:/Windows/Fonts/segoeuib.ttf', family: 'Segoe UI Bold' }
-  ];
-  for (const candidate of fontCandidates) {
-    if (fs.existsSync(candidate.path)) {
-      try { GlobalFonts.registerFromPath(candidate.path, candidate.family); } catch {}
-    }
-  }
+const postJson = fs.existsSync(path.join(postDir, 'post.json'))
+  ? JSON.parse(fs.readFileSync(path.join(postDir, 'post.json'), 'utf-8'))
+  : {};
+const visualTemplate = loadTemplateForSelection(postJson.visualTemplateId, {
+  postDir,
+  accountId: postJson.accountId || '',
+});
+const texts = JSON.parse(fs.readFileSync(textsPath, 'utf-8'));
+const expectedSlideCount = visualTemplate?.slides?.length || 6;
+if (texts.length !== expectedSlideCount) {
+  console.error(`texts.json must have exactly ${expectedSlideCount} entries`);
+  process.exit(1);
 }
+
 registerWindowsFallbackFonts();
 
 function overlayConfigFromProfile(profileObj) {
   const overlay = (profileObj.render && profileObj.render.overlay) || {};
-  const preset = overlay.preset || 'top-safe';
+  const preset = overlay.preset || overlay.placement || 'top-safe';
   const presetMap = {
     'top-safe': { centerYRatio: 0.18, minYRatio: 0.08, maxYRatio: 0.34 },
     'upper-third': { centerYRatio: 0.26, minYRatio: 0.12, maxYRatio: 0.40 },
@@ -67,32 +63,16 @@ function overlayConfigFromProfile(profileObj) {
 
 const overlayCfg = overlayConfigFromProfile(profile);
 
-function wrapText(ctx, text, maxWidth) {
-  const cleanText = text.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').trim();
-  const manualLines = cleanText.split('\n');
-  const wrapped = [];
-
-  for (const line of manualLines) {
-    if (ctx.measureText(line.trim()).width <= maxWidth) {
-      wrapped.push(line.trim());
-      continue;
-    }
-    const words = line.trim().split(/\s+/);
-    let current = '';
-    for (const word of words) {
-      const test = current ? `${current} ${word}` : word;
-      if (ctx.measureText(test).width <= maxWidth) current = test;
-      else {
-        if (current) wrapped.push(current);
-        current = word;
-      }
-    }
-    if (current) wrapped.push(current);
+function normalizeTemplateEntry(entry, slide) {
+  if (!slide || !slide.slots || slide.slots.length === 0) return {};
+  if (entry && typeof entry === 'object' && !Array.isArray(entry)) return entry;
+  if (typeof entry === 'string' && slide.slots.length === 1) {
+    return { [slide.slots[0].name]: normalizeText(entry) };
   }
-  return wrapped;
+  throw new Error(`Slide ${slide.index} requires template slot objects in texts.json.`);
 }
 
-async function addOverlay(imgPath, text, outPath) {
+async function addLegacyOverlay(imgPath, text, outPath) {
   const img = await loadImage(imgPath);
   const canvas = createCanvas(img.width, img.height);
   const ctx = canvas.getContext('2d');
@@ -115,7 +95,7 @@ async function addOverlay(imgPath, text, outPath) {
   const safeY = Math.max(minY, Math.min(startY, maxY));
   const x = img.width / 2;
 
-  for (let i = 0; i < lines.length; i++) {
+  for (let i = 0; i < lines.length; i += 1) {
     const y = safeY + (i * lineHeight);
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = outlineWidth;
@@ -130,15 +110,49 @@ async function addOverlay(imgPath, text, outPath) {
   console.log(`Created ${path.basename(outPath)} @ center-x / y=${Math.round(safeY)}`);
 }
 
+async function addTemplateOverlay(imgPath, slide, textEntry, outPath) {
+  if (!slide || !slide.slots || slide.slots.length === 0) {
+    fs.copyFileSync(imgPath, outPath);
+    console.log(`Copied static ${path.basename(outPath)}`);
+    return;
+  }
+
+  const img = await loadImage(imgPath);
+  const canvas = createCanvas(img.width, img.height);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, img.width, img.height);
+
+  const normalizedEntry = normalizeTemplateEntry(textEntry, slide);
+  for (const slot of slide.slots) {
+    drawTextInSlot(ctx, normalizedEntry[slot.name], slot, img.width, img.height);
+  }
+
+  fs.writeFileSync(outPath, canvas.toBuffer('image/png'));
+  console.log(`Created ${path.basename(outPath)} using template ${visualTemplate.id}`);
+}
+
 (async () => {
-  for (let i = 0; i < 6; i++) {
-    const input = path.join(inputDir, `slide${i + 1}_raw.png`);
-    const output = path.join(inputDir, `slide${i + 1}.png`);
+  for (let i = 0; i < expectedSlideCount; i += 1) {
+    const slideIndex = i + 1;
+    const input = path.join(inputDir, `slide${slideIndex}_raw.png`);
+    const output = path.join(inputDir, `slide${slideIndex}.png`);
+
     if (!fs.existsSync(input)) {
       console.error(`Missing ${input}`);
       process.exit(1);
     }
-    await addOverlay(input, texts[i], output);
+
+    if (visualTemplate?.renderMode === 'template-pack') {
+      const slide = visualTemplate.slides.find((entry) => entry.index === slideIndex);
+      await addTemplateOverlay(input, slide, texts[i], output);
+      continue;
+    }
+
+    await addLegacyOverlay(input, flattenTextEntry(texts[i]), output);
   }
+
   fs.writeFileSync(path.join(inputDir, 'texts.used.json'), JSON.stringify(texts, null, 2));
-})();
+})().catch((error) => {
+  console.error(error.message || String(error));
+  process.exit(1);
+});

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
+const { getSlideTemplate, loadTemplateForSelection } = require('./_templates');
 
 const MIN_IMAGE_BYTES = 10000;
 const DEFAULT_RETRY_MAX_ATTEMPTS = 3;
@@ -163,6 +164,11 @@ function createRuntime(argv = process.argv.slice(2)) {
   const config = mergeConfig(defaults, profile);
   const prompts = JSON.parse(fs.readFileSync(promptsPath, 'utf-8'));
   fs.mkdirSync(outputDir, { recursive: true });
+  const postJson = readJsonIfExists(path.join(outputDirArg, 'post.json'), {}) || {};
+  const visualTemplate = loadTemplateForSelection(postJson.visualTemplateId, {
+    postDir: outputDirArg,
+    accountId: postJson.accountId || '',
+  });
 
   const provider = config.imageGen?.provider || 'openai';
   const model = config.imageGen?.model || 'gpt-image-1';
@@ -170,7 +176,7 @@ function createRuntime(argv = process.argv.slice(2)) {
   const geminiApiKey = process.env.GEMINI_API_KEY;
   const width = config.slides?.width || 1024;
   const height = config.slides?.height || 1536;
-  const slideCount = config.slides?.count || 6;
+  const slideCount = visualTemplate?.slides?.length || config.slides?.count || 6;
   const size = `${width}x${height}`;
   const language = config.language || 'en';
   const geminiAspectRatio = aspectRatioFromSize(width, height);
@@ -180,10 +186,10 @@ function createRuntime(argv = process.argv.slice(2)) {
   if (!prompts.slides || prompts.slides.length !== slideCount) {
     throw new Error(`prompts.json must contain exactly ${slideCount} slide prompts`);
   }
-  if (provider === 'openai' && !openaiApiKey) {
+  if (!visualTemplate && provider === 'openai' && !openaiApiKey) {
     throw new Error('Missing OPENAI_API_KEY. Configure it via ~/.openclaw/openclaw.json under skills.entries.tiktok-slideshow-creator.');
   }
-  if (provider === 'gemini' && !geminiApiKey) {
+  if (!visualTemplate && provider === 'gemini' && !geminiApiKey) {
     throw new Error('Missing GEMINI_API_KEY. Configure it via ~/.openclaw/openclaw.json under skills.entries.tiktok-slideshow-creator.env.GEMINI_API_KEY.');
   }
 
@@ -195,8 +201,10 @@ function createRuntime(argv = process.argv.slice(2)) {
     promptsPath,
     mode,
     prompts,
+    postJson,
     provider,
     model,
+    visualTemplate,
     openaiApiKey,
     geminiApiKey,
     width,
@@ -208,6 +216,10 @@ function createRuntime(argv = process.argv.slice(2)) {
     geminiImageSize,
     retry,
   };
+}
+
+function isTemplatePackRuntime(runtime) {
+  return runtime.visualTemplate?.renderMode === 'template-pack';
 }
 
 function makePrompt(runtime, text) {
@@ -332,6 +344,90 @@ async function editByProvider(runtime, referencePath, prompt, outPath) {
   if (runtime.provider === 'openai') return editOpenAI(runtime, referencePath, prompt, outPath);
   if (runtime.provider === 'gemini') return editGemini(runtime, referencePath, prompt, outPath);
   throw new Error(`Hero variations are not implemented for provider: ${runtime.provider}`);
+}
+
+function ensureTemplateAssetCopy(slide, outPath) {
+  if (!slide) throw new Error('Missing template slide definition');
+  if (!fs.existsSync(slide.assetPath)) {
+    throw new Error(`Missing template asset for slide ${slide.index}: ${slide.assetPath}`);
+  }
+  fs.copyFileSync(slide.assetPath, outPath);
+}
+
+async function runTemplatePack(runtime) {
+  console.log(`Rendering ${runtime.slideCount} raw slides from template ${runtime.visualTemplate.id}`);
+  appendProcessLog(runtime.outputDir, `\n===== generate-images attempt ${new Date().toISOString()} =====\n`);
+  appendProcessLog(runtime.outputDir, `mode=template-pack template=${runtime.visualTemplate.id} slideCount=${runtime.slideCount}\n`);
+
+  const heroPath = path.join(runtime.outputDir, 'hero_frame.png');
+  const attemptIndex = appendAttempt(runtime.outputDir, {
+    startedAt: new Date().toISOString(),
+    mode: 'template-pack',
+    provider: 'template-pack',
+    model: runtime.visualTemplate.id,
+    slideCount: runtime.slideCount,
+    slides: [],
+  });
+
+  try {
+    const heroSlide = getSlideTemplate(runtime.visualTemplate, 1);
+    const heroEntry = { slide: 0, output: 'hero_frame.png', startedAt: new Date().toISOString() };
+    if (!fs.existsSync(heroPath) || fs.statSync(heroPath).size <= MIN_IMAGE_BYTES) {
+      ensureTemplateAssetCopy(heroSlide, heroPath);
+      heroEntry.status = 'ok';
+      appendProcessLog(runtime.outputDir, `hero: ok bytes=${fs.statSync(heroPath).size} source=template\n`);
+    } else {
+      heroEntry.status = 'skipped-existing';
+    }
+    heroEntry.bytes = fs.statSync(heroPath).size;
+    heroEntry.finishedAt = new Date().toISOString();
+    {
+      const log = readLog(runtime.outputDir);
+      log.attempts[attemptIndex].slides.push(heroEntry);
+      writeLog(runtime.outputDir, log);
+    }
+
+    for (let index = 1; index <= runtime.slideCount; index += 1) {
+      const slideSpec = getSlideTemplate(runtime.visualTemplate, index);
+      const outPath = path.join(runtime.outputDir, `slide${index}_raw.png`);
+      const slideEntry = { slide: index, output: path.basename(outPath), startedAt: new Date().toISOString() };
+
+      if (fs.existsSync(outPath) && fs.statSync(outPath).size > MIN_IMAGE_BYTES) {
+        slideEntry.status = 'skipped-existing';
+        slideEntry.bytes = fs.statSync(outPath).size;
+        appendProcessLog(runtime.outputDir, `slide ${index}: skipped-existing ${path.basename(outPath)} bytes=${slideEntry.bytes}\n`);
+      } else if (index === 1 && fs.existsSync(heroPath) && fs.statSync(heroPath).size > MIN_IMAGE_BYTES) {
+        fs.copyFileSync(heroPath, outPath);
+        slideEntry.status = 'ok';
+        slideEntry.bytes = fs.statSync(outPath).size;
+        appendProcessLog(runtime.outputDir, `slide ${index}: ok bytes=${slideEntry.bytes} source=hero_frame\n`);
+      } else {
+        ensureTemplateAssetCopy(slideSpec, outPath);
+        slideEntry.status = 'ok';
+        slideEntry.bytes = fs.statSync(outPath).size;
+        appendProcessLog(runtime.outputDir, `slide ${index}: ok bytes=${slideEntry.bytes} source=template\n`);
+      }
+
+      slideEntry.finishedAt = new Date().toISOString();
+      const log = readLog(runtime.outputDir);
+      log.attempts[attemptIndex].slides.push(slideEntry);
+      writeLog(runtime.outputDir, log);
+    }
+
+    updateAttempt(runtime.outputDir, attemptIndex, { status: 'ok', finishedAt: new Date().toISOString() });
+    appendProcessLog(runtime.outputDir, 'attempt status=ok\n');
+  } catch (error) {
+    const attemptPatch = {
+      status: 'failed',
+      finishedAt: new Date().toISOString(),
+      error: error.message || String(error),
+      transientFailureDetected: false,
+      rateLimitDetected: false,
+    };
+    updateAttempt(runtime.outputDir, attemptIndex, attemptPatch);
+    appendProcessLog(runtime.outputDir, `attempt status=failed error=${attemptPatch.error}\n`);
+    throw error;
+  }
 }
 
 async function retryImageOperation({
@@ -530,6 +626,10 @@ async function runHeroVariations(runtime) {
 
 async function main(argv = process.argv.slice(2)) {
   const runtime = createRuntime(argv);
+  if (isTemplatePackRuntime(runtime)) {
+    await runTemplatePack(runtime);
+    return;
+  }
   if (runtime.mode === 'independent') {
     await runIndependent(runtime);
     return;
@@ -556,5 +656,6 @@ module.exports = {
   retryImageOperation,
   runHeroVariations,
   runIndependent,
+  runTemplatePack,
   sleep,
 };

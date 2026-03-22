@@ -23,6 +23,7 @@ Use this structure:
 
 - `defaults.json` at the repo root for shared technical defaults
 - `<account>/profile.json` as the main account file
+- `<account>/templates/<visualTemplateId>/...` for account-owned visual template packs
 - `<account>/campaigns/<campaign>/brief.json` for account-level campaign messaging
 - `<account>/tiktok/examples.md` for TikTok-specific hooks and examples
 - `<account>/tiktok/posts/<YYYY-MM-DD-slideshow-post>/...` for concrete slideshow assets
@@ -44,6 +45,15 @@ Creative generation is agent-first:
 - the scripts should build task payloads and apply/validate the agent output
 - API keys are only for image generation
 
+Visual templates are separate from editorial families:
+- `templateFamily` stays editorial and is used for freshness/copy guidance
+- `visualTemplateId` selects the concrete layout/composition pack
+- `visualTemplateId` should usually come from `<account>/campaigns/<campaign>/brief.json`
+- real template packs should live in `<account>/templates/<visualTemplateId>/`
+- shared reusable packs may also live in `_shared/templates/<visualTemplateId>/`
+- some template packs can render slides locally from static assets, including static closing slides, without calling an image provider
+- see `references/visual-templates.md` for the pack layout and manifest contract
+
 ## Workflow
 
 ### 1. Initialize a content repo
@@ -60,6 +70,8 @@ Use `scripts/create-account.js` when the user wants the account skeleton only.
 
 Use `scripts/create-campaign.js` when the user wants a campaign but does not want a post scaffold yet.
 
+If the campaign should use a specific visual template, set `visualTemplateId` in `brief.json` or pass `--visual-template`.
+
 ### 4. Create an account + campaign + post
 
 Use `scripts/create-post.js` when the user wants a post folder with starter files.
@@ -74,6 +86,8 @@ This script should produce:
 - `prompts.json`
 - `texts.json`
 - `caption.txt`
+
+If a visual template pack is active, `texts.json` may be an array of per-slide objects keyed by manifest slot names instead of simple overlay strings.
 
 This script should not call external text-generation APIs. Instead it should either:
 - emit a structured draft task payload the agent can use to generate creative JSON
@@ -95,6 +109,8 @@ Pass the post directory to `--output`; the script will write generated files int
 
 Prefer hero-frame + variations when consistency matters. Generate `hero_frame.png` first, then derive the later slides from it.
 
+If the selected `visualTemplateId` points to a local `template-pack`, this step may create `slideN_raw.png` directly from content-owned template assets instead of calling an image provider. Use this for layout-first packs and static closing slides.
+
 ### 7. Add text overlays
 
 Use `scripts/add-text-overlay.js`.
@@ -104,6 +120,8 @@ Pass the post directory to `--input`; the script will read and write image files
 This script uses `@napi-rs/canvas` as the overlay backend.
 
 Keep text horizontally centered. Control vertical placement with `profile.render.overlay` safe-zone settings. Prefer `top-safe` for people-centric slideshows so text stays above the subject's face more often.
+
+If a template pack is active, use the template manifest slot layout instead of the generic centered overlay layout.
 
 ### 8. Export a ready-to-publish package
 
@@ -135,6 +153,7 @@ Use `scripts/build-post-package.js` only if you want a lightweight manifest in-p
 - For slide formula and hook patterns: `references/slide-structure.md`
 - For image prompt guidance: `references/prompting.md`
 - For overlay copy and layout rules: `references/text-overlay.md`
+- For visual template pack structure and `manifest.json`: `references/visual-templates.md`
 - For separating account identity from campaign-specific messaging: `references/account-profiles.md`
 
 ## Output convention
@@ -146,6 +165,10 @@ Prefer a tree like:
   defaults.json
   human-in-the-loop/
     profile.json
+    templates/
+      openclaw-multi-agent/
+        manifest.json
+        slides/
     campaigns/
       campaign-name/
         brief.json

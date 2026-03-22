@@ -5,10 +5,24 @@ const {
   ensureAccount,
   ensureCampaign,
   ensureDir,
+  readJsonIfExists,
   slugify,
   writeJsonIfMissing,
   writeTextIfMissing,
 } = require('./_lib');
+const {
+  buildTemplateTextPlaceholders,
+  loadTemplateForSelection,
+} = require('./_templates');
+
+const DEFAULT_SLIDE_PROMPTS = [
+  'Hook state.',
+  'Problem state.',
+  'Discovery state.',
+  'Transformation 1.',
+  'Transformation 2.',
+  'Best final state that supports the CTA.'
+];
 
 const args = process.argv.slice(2);
 function getArg(name) {
@@ -28,9 +42,10 @@ try {
   const message = getArg('message') || '';
   const angle = getArg('angle') || '';
   const templateFamily = getArg('template-family') || '';
+  const explicitVisualTemplateId = slugify(getArg('visual-template'));
 
   if (!accountId || !campaignId || !postTitle) {
-    console.error('Usage: node create-post.js [--dir <content-root>] --account <account-id> --campaign <campaign-id> --title <post-title> [--post <post-slug>] [--offer <offer-name>] [--cta <cta>] [--message <message>] [--angle <editorial-angle>] [--template-family <template-family>]');
+    console.error('Usage: node create-post.js [--dir <content-root>] --account <account-id> --campaign <campaign-id> --title <post-title> [--post <post-slug>] [--offer <offer-name>] [--cta <cta>] [--message <message>] [--angle <editorial-angle>] [--template-family <template-family>] [--visual-template <template-id>]');
     process.exit(1);
   }
 
@@ -58,26 +73,30 @@ try {
   if (account.examples) console.log(`Created ${account.examplesPath}`);
   if (campaign.created) console.log(`Created ${campaign.briefPath}`);
 
-  if (writeJsonIfMissing(promptsPath, {
-    base: 'iPhone photo of the same subject in the same scene, realistic lighting, portrait orientation, no text, no logos, no watermarks.',
-    slides: [
-      'Hook state.',
-      'Problem state.',
-      'Discovery state.',
-      'Transformation 1.',
-      'Transformation 2.',
-      'Best final state that supports the CTA.'
-    ]
-  })) console.log(`Created ${promptsPath}`);
-
-  if (writeJsonIfMissing(textsPath, [
+  const campaignBrief = readJsonIfExists(campaign.briefPath, {}) || {};
+  const visualTemplateId = explicitVisualTemplateId || campaignBrief.visualTemplateId || '';
+  const visualTemplate = loadTemplateForSelection(visualTemplateId, {
+    contentRoot: rootDir,
+    accountId,
+  });
+  const placeholderTexts = visualTemplate ? buildTemplateTextPlaceholders(visualTemplate) : [
     'Hook goes\\nhere',
     'Problem goes\\nhere',
     'Discovery goes\\nhere',
     'First reaction\\ngoes here',
     'Second reaction\\ngoes here',
     'CTA goes\\nhere'
-  ])) console.log(`Created ${textsPath}`);
+  ];
+  const slidePrompts = visualTemplate
+    ? visualTemplate.slides.map((slide, index) => DEFAULT_SLIDE_PROMPTS[index] || `Slide ${slide.index} state.`)
+    : DEFAULT_SLIDE_PROMPTS;
+
+  if (writeJsonIfMissing(promptsPath, {
+    base: 'iPhone photo of the same subject in the same scene, realistic lighting, portrait orientation, no text, no logos, no watermarks.',
+    slides: slidePrompts
+  })) console.log(`Created ${promptsPath}`);
+
+  if (writeJsonIfMissing(textsPath, placeholderTexts)) console.log(`Created ${textsPath}`);
 
   if (writeTextIfMissing(captionPath, 'Draft the caption here.\n')) console.log(`Created ${captionPath}`);
 
@@ -95,6 +114,7 @@ try {
     message,
     angle,
     templateFamily,
+    visualTemplateId,
     profile: path.relative(postDir, account.profilePath).replace(/\\/g, '/'),
     brief: path.relative(postDir, campaign.briefPath).replace(/\\/g, '/')
   })) console.log(`Created ${postConfigPath}`);

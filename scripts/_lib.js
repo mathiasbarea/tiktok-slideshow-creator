@@ -32,6 +32,11 @@ function writeTextIfMissing(filePath, value) {
   return false;
 }
 
+function readJsonIfExists(filePath, fallback = null) {
+  if (!fs.existsSync(filePath)) return fallback;
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
 function getAccountDir(rootDir, accountId) {
   return path.join(rootDir, accountId);
 }
@@ -46,6 +51,10 @@ function getCampaignDir(rootDir, accountId, campaignId) {
 
 function getPlatformDir(rootDir, accountId, platform = TIKTOK_PLATFORM) {
   return path.join(getAccountDir(rootDir, accountId), platform);
+}
+
+function getTemplatesDir(rootDir, accountId) {
+  return path.join(getAccountDir(rootDir, accountId), 'templates');
 }
 
 function getPostsDir(rootDir, accountId, platform = TIKTOK_PLATFORM) {
@@ -98,16 +107,19 @@ function ensureAccount(rootDir, accountId) {
   const accountDir = getAccountDir(rootDir, accountId);
   const platformDir = getPlatformDir(rootDir, accountId);
   const postsDir = getPostsDir(rootDir, accountId);
+  const templatesDir = getTemplatesDir(rootDir, accountId);
   const profilePath = path.join(accountDir, 'profile.json');
   const examplesPath = path.join(platformDir, 'examples.md');
   ensureDir(accountDir);
   ensureDir(platformDir);
   ensureDir(postsDir);
+  ensureDir(templatesDir);
 
   const created = {
     accountDir,
     platformDir,
     postsDir,
+    templatesDir,
     profilePath,
     examplesPath,
     profile: writeJsonIfMissing(profilePath, defaultProfile(accountId)),
@@ -130,6 +142,7 @@ function ensureCampaign(rootDir, accountId, campaignId, brief = {}) {
     goal: brief.goal || '',
     message: brief.message || '',
     cta: brief.cta || '',
+    visualTemplateId: brief.visualTemplateId || '',
     notes: brief.notes || []
   });
 
@@ -145,6 +158,8 @@ module.exports = {
   getCampaignsDir,
   getPlatformDir,
   getPostsDir,
+  getTemplatesDir,
+  readJsonIfExists,
   slugify,
   TIKTOK_PLATFORM,
   writeJsonIfMissing,
